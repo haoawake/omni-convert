@@ -65,6 +65,9 @@ func (a *app) onShotTimer() {
 			a.layout()
 		case "add":
 			a.addFiles(strings.Split(arg, "|"), true)
+			for i := 0; i < 600 && a.walking.Load() > 0; i++ {
+				a.pump(20) // 等后台把文件夹展开完
+			}
 		case "start":
 			a.start(nil)
 		case "wait":

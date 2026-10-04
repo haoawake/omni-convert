@@ -96,18 +96,36 @@ func add(p *Page, t *Target) {
 	targets[t.ID] = t
 }
 
-// Defaults 在 o 里补上这个目标所有选项的默认值（已经有值的不动）
+// Defaults 在 o 里补上这个目标所有选项的默认值（已经有值的不动），
+// 并把不在可选范围里的值（换了目标、或者旧版本存下的设置）改回默认值。
 func (t *Target) Defaults(o conv.Options) {
 	for _, r := range t.Rows {
 		for _, f := range r.Fields {
 			if f.Key == "" || f.Apply != nil || f.Type == Static {
 				continue
 			}
-			if _, ok := o[f.Key]; !ok && f.Default != "" {
-				o[f.Key] = f.Default
+			v, ok := o[f.Key]
+			if ok && len(f.Choices) > 0 && !hasChoice(f.Choices, v) {
+				ok = false
+			}
+			if !ok {
+				if f.Default != "" {
+					o[f.Key] = f.Default
+				} else {
+					delete(o, f.Key)
+				}
 			}
 		}
 	}
+}
+
+func hasChoice(cs []Choice, v string) bool {
+	for _, c := range cs {
+		if c.Value == v {
+			return true
+		}
+	}
+	return false
 }
 
 // Visible 列出当前选项下要显示的行和控件
@@ -164,6 +182,26 @@ func (t *Target) Prepare(ui conv.Options) conv.Options {
 			o[conv.OptTargetSize] = v
 		}
 	}
+	// 动图的宽度和帧率
+	if v, ok := o[keyAnimW]; ok {
+		delete(o, keyAnimW)
+		if v == "keep" || v == "" {
+			o[conv.OptResize] = "none"
+		} else {
+			o[conv.OptResize], o[conv.OptWidth], o[conv.OptHeight] = "box", v, "0"
+		}
+	}
+	if v, ok := o[keyAnimFPS]; ok {
+		delete(o, keyAnimFPS)
+		o[conv.OptFPS] = v
+	}
+	// 加密时设置的新密码
+	if v, ok := o[keyNewPassword]; ok {
+		delete(o, keyNewPassword)
+		if v != "" {
+			o[conv.OptPassword] = v
+		}
+	}
 	// 视频分辨率预设
 	if v, ok := o[keyRes]; ok {
 		delete(o, keyRes)
@@ -184,11 +222,14 @@ func (t *Target) Prepare(ui conv.Options) conv.Options {
 
 // 只在界面上用、交给转换器前会被换算掉的键
 const (
-	keySizePreset = "sizepreset"
-	keySizeNum    = "sizenum"
-	keySizeUnit   = "sizeunit"
-	keyRes        = "res"
-	keyPreset     = "preset"
+	keySizePreset  = "sizepreset"
+	keySizeNum     = "sizenum"
+	keySizeUnit    = "sizeunit"
+	keyRes         = "res"
+	keyPreset      = "preset"
+	keyAnimW       = "animw"
+	keyAnimFPS     = "animfps"
+	keyNewPassword = "newpw"
 )
 
 // Accepts 判断某个文件能不能放进这一页的列表（这一页至少有一个目标能处理它）

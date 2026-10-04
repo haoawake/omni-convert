@@ -4,7 +4,9 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
+	"time"
 )
 
 func TestKindOf(t *testing.T) {
@@ -114,5 +116,24 @@ func TestSafeName(t *testing.T) {
 	}
 	if SafeName("...") != "未命名" {
 		t.Error("全是点的名字要换掉")
+	}
+}
+
+func TestOutFileLongName(t *testing.T) {
+	dir := t.TempDir()
+	long := strings.Repeat("很长的名字", 60) // 300 个字符，超过 Windows 一段路径的上限
+	j := NewJob([]string{filepath.Join(dir, long+".pdf")}, "pdf:compress", nil, dir, nil)
+	done := make(chan string, 1)
+	go func() { done <- j.OutFileNamed(j.Base()+"_压缩", ".pdf") }()
+	select {
+	case p := <-done:
+		if n := len([]rune(filepath.Base(p))); n > 255 {
+			t.Fatalf("文件名太长（%d 个字符）", n)
+		}
+		if err := os.WriteFile(p, []byte("x"), 0o644); err != nil {
+			t.Fatalf("截短后的名字应该能写：%v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("挑文件名卡住了")
 	}
 }

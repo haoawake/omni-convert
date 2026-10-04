@@ -68,6 +68,26 @@ func TestPrepare(t *testing.T) {
 	if o[conv.OptWidth] != "480" || o[conv.OptHeight] != "0" || o[conv.OptFPS] != "12" {
 		t.Errorf("GIF 默认值不对：%v", o)
 	}
+	// 同一页的 MP4 选了 1080P、30 帧，切到 GIF 不能带过去；反过来也一样
+	ui := conv.Options{keyRes: "1920x1080", conv.OptFPS: "30"}
+	v.Defaults(ui)
+	g.Defaults(ui)
+	o = g.Prepare(ui)
+	if o[conv.OptWidth] != "480" || o[conv.OptFPS] != "12" {
+		t.Errorf("MP4 的设置漏到了 GIF：%v", o)
+	}
+	ui[keyAnimW], ui[keyAnimFPS] = "640", "10"
+	v.Defaults(ui)
+	o = v.Prepare(ui)
+	if o[conv.OptWidth] != "1920" || o[conv.OptFPS] != "30" {
+		t.Errorf("GIF 的设置漏到了 MP4：%v", o)
+	}
+	// 旧设置里不认识的值改回默认
+	bad := conv.Options{conv.OptFPS: "7", keyRes: "999x999"}
+	v.Defaults(bad)
+	if bad[conv.OptFPS] != "0" || bad[keyRes] != "keep" {
+		t.Errorf("无效的值没改回默认：%v", bad)
+	}
 }
 
 func TestPresetApply(t *testing.T) {
@@ -113,7 +133,8 @@ func TestCheck(t *testing.T) {
 		{"vid:mp4", conv.Options{conv.OptStart: "abc"}, true},
 		{"vid:mp4", conv.Options{conv.OptStart: "0:10", conv.OptEnd: "1:30"}, false},
 		{"pdf:encrypt", conv.Options{}, true},
-		{"pdf:encrypt", conv.Options{conv.OptPassword: "123"}, false},
+		{"pdf:encrypt", conv.Options{conv.OptPassword: "123"}, true}, // 解密时填的旧密码不算
+		{"pdf:encrypt", conv.Options{keyNewPassword: "123"}, false},
 		{"pdf:split", conv.Options{conv.OptSplit: "ranges"}, true},
 		{"pdf:split", conv.Options{conv.OptSplit: "ranges", conv.OptRanges: "1-3,5"}, false},
 		{"pdf:jpg", conv.Options{conv.OptPages: "x-y"}, true},

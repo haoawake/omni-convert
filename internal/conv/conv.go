@@ -234,10 +234,17 @@ var (
 	reserved   = map[string]bool{}
 )
 
+// maxBase 是文件名（不含扩展名和「 (1)」）最多保留的字符数。Windows 一段路径最长 255 个字符，
+// 留出加后缀、编号的余量；浏览器下载的超长文件名会被截短。
+const maxBase = 200
+
 func reserve(dir, base, ext string, folder bool) string {
 	reservedMu.Lock()
 	defer reservedMu.Unlock()
 	base = SafeName(base)
+	if r := []rune(base); len(r) > maxBase {
+		base = strings.TrimRight(string(r[:maxBase]), " .")
+	}
 	for i := 0; ; i++ {
 		name := base + ext
 		if i > 0 {
@@ -248,7 +255,9 @@ func reserve(dir, base, ext string, folder bool) string {
 		if reserved[key] {
 			continue
 		}
-		if _, err := os.Lstat(p); err == nil || !errors.Is(err, os.ErrNotExist) {
+		_, err := os.Lstat(p)
+		// 查不了（比如没有权限）的名字也跳过，但别无限地试下去：实在不行就交给写文件时报错
+		if (err == nil || !errors.Is(err, os.ErrNotExist)) && i < 10000 {
 			continue
 		}
 		reserved[key] = true

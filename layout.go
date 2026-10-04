@@ -430,6 +430,7 @@ func (a *app) layoutField(f catalog.Field, r rect, n int, used map[string]bool) 
 	case catalog.Number, catalog.Text, catalog.Password:
 		a.add(widget{id: "edit:" + f.Key, kind: wEdit, r: r, enabled: true})
 		h := a.editFor(f)
+		a.setCue(h, f.Placeholder)
 		used[f.Key] = true
 		if !visible {
 			pShowWindow.Call(h, 0)
@@ -504,6 +505,7 @@ func (a *app) layoutAction() {
 	by := r.Top + (r.H()-bh)/2
 
 	busy := a.pageBusy(a.page())
+	a.btnBusy = busy
 	label, glyph, kind := "开始转换", gPlay, wPrimary
 	if busy {
 		label, glyph, kind = "停止", gStop, wDanger

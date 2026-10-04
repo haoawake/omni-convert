@@ -89,8 +89,12 @@ func (r *Runner) Submit(t *Task) {
 	l := r.laneOf(t.Lane)
 	l.queue = append(l.queue, t)
 	r.pump(l)
+	// 已经开始运行的任务由 exec 自己通知（它可能已经结束了，这里再通知会重复）
+	queued := t.state == Waiting
 	r.mu.Unlock()
-	r.notify(t)
+	if queued {
+		r.notify(t)
+	}
 }
 
 // pump 在有空位时启动排队的任务，调用时要持有锁

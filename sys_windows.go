@@ -49,6 +49,9 @@ func revealFile(path string) error {
 
 type comObj struct{ vtbl *[64]uintptr }
 
+// call 调用 COM 方法。uintptrescapes 让传进来的指针参数（输出参数）留在堆上、调用期间不被挪动或回收。
+//
+//go:uintptrescapes
 func (o *comObj) call(method int, args ...uintptr) uint32 {
 	r, _, _ := syscall.SyscallN(o.vtbl[method], append([]uintptr{uintptr(unsafe.Pointer(o))}, args...)...)
 	return uint32(r)

@@ -66,7 +66,7 @@ func runCLI(args []string) int {
 		case "sizepreset", "sizenum", "sizeunit", "res", "preset":
 			continue // 界面专用的键，Prepare 已经换算过了
 		}
-		if _, ok := opt[k]; !ok {
+		if opt[k] == "" {
 			opt[k] = v
 		}
 	}

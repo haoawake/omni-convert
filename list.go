@@ -183,7 +183,12 @@ func (lv *fileList) fitColumns(width int32) {
 }
 
 func (lv *fileList) setItems(items []*item, t *catalog.Target) {
+	samePage := len(items) > 0 && len(lv.items) > 0 && &items[0] == &lv.items[0]
 	lv.items, lv.target = items, t
+	if !samePage {
+		// 虚拟列表按序号记住选中的行，换了一批文件后要清掉，免得选中别的页的文件
+		lv.selectOnly(-1)
+	}
 	sendMessage(lv.hwnd, lvmSetItemCount, uintptr(len(items)), 0x2 /* LVSICF_NOSCROLL */)
 	invalidate(lv.hwnd, nil)
 }
@@ -435,10 +440,6 @@ func (a *app) onListNotify(lp uintptr) (uintptr, bool) {
 					a.addFiles(files, true)
 				}
 			}
-		case vkUp, vkDown:
-			if keyDown(vkMenu) {
-				a.moveSelected(map[uint16]int{vkUp: -1, vkDown: 1}[kd.VKey])
-			}
 		}
 		return 0, true
 	}
@@ -628,9 +629,17 @@ func (a *app) itemMenu() {
 			}
 		}
 	case cmRedo:
-		it.key = ""
-		it.task = nil
-		a.lv.refresh()
+		if it.task != nil && len(it.task.Job.Inputs) > 1 {
+			// 合并出来的文件：整批重新合并
+			for _, other := range a.page().items {
+				if other.task == it.task {
+					other.key = ""
+				}
+			}
+			a.start(nil)
+			break
+		}
+		it.key = "" // 和当前设置对不上，就会重新转
 		a.start(it)
 	case cmRemove:
 		a.removeSelected()
@@ -659,16 +668,19 @@ func (a *app) removeSelected() {
 	}
 	ps := a.page()
 	drop := map[int]bool{}
+	stoppedMerge := false
 	for _, i := range sel {
 		drop[i] = true
 		if t := ps.items[i].task; t != nil {
 			if s := a.runner.Snapshot(t).State; s == conv.Running || s == conv.Waiting {
-				if len(t.Job.Inputs) > 1 {
-					continue // 合并任务里的文件：先停掉整个任务再移除
-				}
+				// 合并任务里的文件被移除：整个合并停下来，调整好后重新开始
+				stoppedMerge = stoppedMerge || len(t.Job.Inputs) > 1
 				a.runner.Cancel(t)
 			}
 		}
+	}
+	if stoppedMerge {
+		a.showToast("已停止合并，调整好列表后再点「开始转换」", false, "")
 	}
 	var keep []*item
 	for i, it := range ps.items {

@@ -8,6 +8,7 @@ import (
 	"os"
 	"runtime"
 	"strconv"
+	"strings"
 )
 
 // 发版时由 -ldflags "-X main.version=x.y.z" 写入
@@ -25,7 +26,7 @@ func init() {
 
 func main() {
 	// 命令行模式：万能格式转换.exe -to img:jpg [-o 输出文件夹] [-set 键=值 …] 文件…
-	if len(os.Args) > 1 && isCLIFlag(os.Args[1]) {
+	if isCLI(os.Args[1:]) {
 		os.Exit(runCLI(os.Args[1:]))
 	}
 	showVersion := flag.Bool("version", false, "显示版本号")
@@ -43,10 +44,20 @@ func main() {
 	runApp(files)
 }
 
-func isCLIFlag(s string) bool {
-	switch s {
-	case "-to", "--to", "-list", "--list", "-h", "--help", "/?":
-		return true
+// isCLI 参数里出现命令行模式的选项（-to、-o、-set、-q、-list、-h，也可以写成 --to、-to=xx）时不开窗口
+func isCLI(args []string) bool {
+	for _, a := range args {
+		if a == "/?" {
+			return true
+		}
+		if !strings.HasPrefix(a, "-") {
+			continue
+		}
+		name, _, _ := strings.Cut(strings.TrimLeft(a, "-"), "=")
+		switch name {
+		case "to", "o", "set", "q", "list", "h", "help":
+			return true
+		}
 	}
 	return false
 }

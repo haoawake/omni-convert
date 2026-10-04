@@ -228,11 +228,11 @@ func videoRows(codecs []Choice) []Row {
 func animRows(defFPS string) []Row {
 	return []Row{
 		{Label: "宽度", Fields: []Field{
-			{Key: keyRes, Type: Select, Default: "480x0", Width: 150, Choices: choices(
-				"320x0", "320 像素", "480x0", "480 像素", "640x0", "640 像素", "800x0", "800 像素", "keep", "保持原样")},
+			{Key: keyAnimW, Type: Select, Default: "480", Width: 150, Choices: choices(
+				"320", "320 像素", "480", "480 像素", "640", "640 像素", "800", "800 像素", "keep", "保持原样")},
 		}, Note: "动图越宽越大，发聊天用 480 就够"},
 		{Label: "帧率", Fields: []Field{
-			{Key: conv.OptFPS, Type: Seg, Default: defFPS, Choices: choices("8", "8", "10", "10", "12", "12", "15", "15", "20", "20", "25", "25")},
+			{Key: keyAnimFPS, Type: Seg, Default: defFPS, Choices: choices("8", "8", "10", "10", "12", "12", "15", "15", "20", "20", "25", "25")},
 		}},
 		trimRow(),
 	}
@@ -426,7 +426,9 @@ func init() {
 		Row{Label: "", ShowIf: is(conv.OptLevel, "medium"), Note: "压缩里面的图片，文字保持清晰可选，扫描件和带照片的 PDF 效果明显"},
 		Row{Label: "", ShowIf: is(conv.OptLevel, "strong"), Note: "每页转成图片再压缩，体积最小，但文字不能再选中、复制"},
 		pwd)
-	pt("encrypt", "加密", "给 PDF 加上打开密码", "pdf", true, false, passwordRow("设置密码", "打开这个 PDF 要输入的密码"))
+	pt("encrypt", "加密", "给 PDF 加上打开密码", "pdf", true, false, Row{Label: "设置密码", Fields: []Field{
+		{Key: keyNewPassword, Type: Password, Width: 180, Placeholder: "打开这个 PDF 要输入的密码"},
+	}})
 	pt("decrypt", "解密", "去掉 PDF 的密码和编辑限制", "pdf", true, false, passwordRow("原密码", "只有编辑限制的话不用填"))
 	pt("rotate", "旋转", "把页面转个方向", "pdf", true, false,
 		Row{Label: "方向", Fields: []Field{

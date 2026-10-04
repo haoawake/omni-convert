@@ -51,3 +51,18 @@ func TestShortPath(t *testing.T) {
 		t.Errorf("得到 %s", got)
 	}
 }
+
+func TestIsCLI(t *testing.T) {
+	cli := [][]string{{"-to", "img:jpg", "a.png"}, {"-o", `D:\out`, "-to", "img:jpg", "a.png"}, {"-q", "-to=img:jpg"}, {"--list"}, {"/?"}}
+	gui := [][]string{nil, {`D:\照片.heic`}, {"-shot", "a.png", "-steps", "x"}, {"-version"}}
+	for _, a := range cli {
+		if !isCLI(a) {
+			t.Errorf("%v 应该是命令行模式", a)
+		}
+	}
+	for _, a := range gui {
+		if isCLI(a) {
+			t.Errorf("%v 应该开窗口", a)
+		}
+	}
+}
