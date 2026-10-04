@@ -1,0 +1,70 @@
+# 推送 v* 标签就构建 Windows 版发布包，发布成 Release。
+# 发版步骤：在 CHANGELOG.md 顶部写好这一版的说明（标题形如「## v1.2.0」），
+# 提交后 git tag v1.2.0 && git push origin v1.2.0。
+#
+# 手动运行（workflow_dispatch）只构建、把产物存成 artifact，不发 Release，用来检查流程本身。
+
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: fetch tools
+        shell: bash
+        run: bash scripts/fetch-tools.sh
+      - run: go vet ./...
+      - run: go test -short ./...
+
+  release:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: install 7z
+        run: sudo apt-get update && sudo apt-get install -y p7zip-full
+
+      - name: build
+        run: |
+          ver=dev
+          if [ "$GITHUB_REF_TYPE" = tag ]; then ver="${GITHUB_REF_NAME#v}"; fi
+          bash scripts/build.sh "$ver"
+
+      - name: upload artifact
+        if: github.ref_type != 'tag'
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/*
+
+      - name: publish release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="$GITHUB_REF_NAME"
+          # 从 CHANGELOG.md 里取出「## <tag>」这一节作为 Release 说明
+          awk -v t="## $tag" 'index($0, t) == 1 { p = 1; next } /^## / { p = 0 } p' CHANGELOG.md > notes.md
+          [ -s notes.md ] || echo "万能格式转换 $tag" > notes.md
+          if gh release view "$tag" > /dev/null 2>&1; then
+            gh release upload "$tag" dist/* --clobber
+          else
+            gh release create "$tag" dist/* --title "万能格式转换 $tag" --notes-file notes.md
+          fi

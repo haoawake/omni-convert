@@ -1,0 +1,21 @@
+# 每次推送都在 Windows 上跑一遍测试（先下载转换引擎；没有 Office 的测试会自动跳过）
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: fetch tools
+        shell: bash
+        run: bash scripts/fetch-tools.sh
+      - run: go vet ./...
+      - run: go test -short ./...
