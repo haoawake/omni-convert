@@ -1,8 +1,8 @@
-dist/
-build/
+/dist/
+/build/
 *.exe
 # 转换引擎由 scripts/fetch-tools.sh 下载，不放进仓库
-tools/
+/tools/
 # go-winres 生成的 Windows 资源，构建脚本每次重新生成
 rsrc_windows_*.syso
 .DS_Store
