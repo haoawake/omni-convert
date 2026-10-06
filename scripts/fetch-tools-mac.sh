@@ -100,8 +100,17 @@ while [ ${#queue[@]} -gt 0 ]; do
 			fi
 			;;
 		*)
-			echo "$f 引用了不能搬走的库：$dep" >&2
-			exit 1
+			# 个别 conda-forge 的包编译时漏进了绝对路径（比如 libheif 指向 /opt/homebrew/…/libsharpyuv），
+			# 环境里有同名的库时改成 @rpath 引用，否则就是真的搬不走
+			name=$(basename "$dep")
+			if [ -e "$env/lib/$name" ]; then
+				echo "  修正 $(basename "$f") 里的 $dep"
+				install_name_tool -change "$dep" "@rpath/$name" "$f" 2> /dev/null
+				queue+=("$f") # 改完再检查一遍，顺便把这个库拷过来
+			else
+				echo "$f 引用了不能搬走的库：$dep" >&2
+				exit 1
+			fi
 			;;
 		esac
 	done

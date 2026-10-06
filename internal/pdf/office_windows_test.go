@@ -128,6 +128,12 @@ func TestLockedFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if f, err := os.Open(p); err == nil {
+		// 有的环境（比如 GitHub 的 Windows 机器）独占打开不生效，别的程序照样能读
+		f.Close()
+		windows.CloseHandle(h)
+		t.Skip("这台机器上独占打开文件不起作用，跳过")
+	}
 	_, err = Open(p, "")
 	windows.CloseHandle(h)
 	if userMsg(err) != "打不开这个文件，可能正被别的程序占用" {

@@ -28,6 +28,7 @@ enum {
 	UI_DROPZONE,  // 虚线框的拖放区域
 	UI_LIST,      // 文件列表（整个程序只有一个）
 	UI_SPINNER,   // 小的转圈
+	UI_LINE,      // 一条分隔线
 };
 
 // 字体
@@ -50,6 +51,7 @@ void ui_window(const char *title, double w, double h, double minW, double minH);
 void ui_run(void);
 void ui_quit(void);
 void ui_set_title(const char *title);
+void ui_set_version(const char *s); // 左下角的版本号
 void ui_content_size(double *w, double *h);
 double ui_top_inset(void); // 标题栏占掉的高度（内容一直铺到窗口顶上）
 
@@ -61,6 +63,7 @@ void ui_text(int id, const char *s);
 void ui_placeholder(int id, const char *s);
 void ui_font(int id, int font);
 void ui_tone(int id, int tone);
+void ui_align(int id, int align); // 0 左对齐，1 居中，2 右对齐
 void ui_on(int id, int on);
 void ui_enabled(int id, int on);
 void ui_hidden(int id, int hidden);

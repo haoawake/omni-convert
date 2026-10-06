@@ -32,6 +32,9 @@ jobs:
       - name: fetch tools
         id: fetch
         run: bash scripts/fetch-tools-mac.sh 2>&1 | tee out/fetch.log
+      - name: keep lock file
+        if: always()
+        run: cp scripts/mac/imagemagick-osx-arm64.lock out/ 2>/dev/null || true
       - name: probe tools
         id: probe
         if: always() && steps.fetch.outcome == 'success'
