@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 
 	"github.com/haoawake/omni-convert/internal/conv"
@@ -114,13 +113,6 @@ func edgePath() string {
 		return ""
 	}
 	return Detect().Edge
-}
-
-func errNoOffice() error {
-	if runtime.GOOS != "windows" {
-		return conv.Fail("这个功能只支持 Windows", "")
-	}
-	return conv.Fail("需要安装 Microsoft Office、WPS 或 LibreOffice 才能转换这类文件", "LibreOffice 是免费的：https://zh-cn.libreoffice.org")
 }
 
 // withEngine 依次用能用的程序试，程序启动不了就换下一个；文件本身的问题（有密码、损坏）直接返回

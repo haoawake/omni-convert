@@ -40,6 +40,12 @@ func runCLI(args []string) int {
 		printTargets()
 		return 0
 	}
+	if *out != "" {
+		// 外部程序在临时文件夹里运行（两遍编码的日志放在那里），相对路径要先换成完整路径
+		if p, err := filepath.Abs(*out); err == nil {
+			*out = p
+		}
+	}
 	t := catalog.ByID(*to)
 	if t == nil {
 		fmt.Fprintf(os.Stderr, "不认识的转换目标 %q，用 -list 查看全部\n", *to)

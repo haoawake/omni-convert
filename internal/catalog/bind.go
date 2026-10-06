@@ -7,6 +7,9 @@ package catalog
 import (
 	"context"
 	"fmt"
+	"image/jpeg"
+	"math"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -74,6 +77,8 @@ func bindAll() {
 		switch id {
 		case "png", "long":
 			t.Run = docViaPDF(id)
+		case "mp4":
+			t.Run = pptToVideo
 		default:
 			t.Run = office.Convert(id)
 		}
@@ -151,6 +156,58 @@ func docViaPDF(to string) conv.RunFunc {
 		}
 		return pdf.LongImageFrom(ctx, j, src)
 	}
+}
+
+// pptToVideo 有 Microsoft PowerPoint 时用它导出视频（保留动画和切换效果）；没有时（macOS、只装了 WPS 或
+// LibreOffice）先转成 PDF，再把每一页画成一张画面，按「每页停留」的秒数连成 MP4（没有动画）
+func pptToVideo(ctx context.Context, j *conv.Job) error {
+	if office.CanExportVideo() || conv.FamilyOf(j.Input()) != conv.FamPPT {
+		return office.Convert("mp4")(ctx, j)
+	}
+	tmp, err := j.TempDir()
+	if err != nil {
+		return err
+	}
+	src := filepath.Join(tmp, "演示.pdf")
+	j.Report(-1, "正在转成 PDF…")
+	if err := office.ToPDF(ctx, j.Input(), src); err != nil {
+		return err
+	}
+	d, err := pdf.Open(src, "")
+	if err != nil {
+		return err
+	}
+	defer d.Close()
+	n := d.PageCount()
+	// 画面大小按第一页的比例：16:9 的 PPT 就是 1920×1080
+	pw, ph := d.PageSize(0)
+	H := 1080
+	W := min(max(int(math.Round(float64(H)*pw/ph/2))*2, 720), 2560)
+	for i := 0; i < n; i++ {
+		if ctx.Err() != nil {
+			return conv.ErrCancelled
+		}
+		j.Report(float64(i)/float64(n)*0.5, fmt.Sprintf("正在准备第 %d/%d 页", i+1, n))
+		w, h := d.PageSize(i)
+		s := math.Min(float64(W)/w, float64(H)/h)
+		img, err := d.RenderPx(i, int(math.Round(w*s)), int(math.Round(h*s)))
+		if err != nil {
+			return err
+		}
+		f, err := os.Create(filepath.Join(tmp, fmt.Sprintf("page_%04d.jpg", i+1)))
+		if err != nil {
+			return err
+		}
+		err = jpeg.Encode(f, img, &jpeg.Options{Quality: 92})
+		if cerr := f.Close(); err == nil {
+			err = cerr
+		}
+		if err != nil {
+			return conv.Fail("没法生成视频画面", err.Error())
+		}
+	}
+	sec := min(max(j.Opt.Int(conv.OptSlideSec, 5), 1), 600)
+	return media.Slideshow(ctx, j, filepath.Join(tmp, "page_%04d.jpg"), n, sec, W, H)
 }
 
 // pdfToWord 有 Word（或 LibreOffice）时转成可编辑的文档，都没有时只提取文字

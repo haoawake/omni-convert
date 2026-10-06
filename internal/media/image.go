@@ -268,8 +268,11 @@ func planImage(ctx context.Context, in, ext, format string, opt conv.Options) (*
 		ops = append(ops, "-coalesce") // 每一帧都变成完整画面，才能缩放、裁剪
 	}
 	ops = append(ops, "-auto-orient")
-	srgb := filepath.Join(filepath.Dir(tools.Magick()), "sRGB.icc")
-	_, iccErr := os.Stat(srgb)
+	srgb := tools.SRGBProfile()
+	var iccErr error
+	if srgb == "" {
+		iccErr = os.ErrNotExist
+	}
 	if info.cmyk {
 		// 印刷用的 CMYK 图转成屏幕用的 sRGB；有色彩配置文件时按配置文件转，颜色更准
 		if info.icc && iccErr == nil {
@@ -630,8 +633,7 @@ func PrepareForPDF(ctx context.Context, in string, opt conv.Options, tmpDir stri
 	ops := append([]string{}, pre...)
 	ops = append(ops, fmt.Sprintf("%s[%d]", src, info.frame), "-auto-orient")
 	if info.cmyk {
-		srgb := filepath.Join(filepath.Dir(tools.Magick()), "sRGB.icc")
-		if _, err := os.Stat(srgb); err == nil && info.icc {
+		if srgb := tools.SRGBProfile(); srgb != "" && info.icc {
 			ops = append(ops, "-profile", srgb)
 		} else {
 			ops = append(ops, "-colorspace", "sRGB")

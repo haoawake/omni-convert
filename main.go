@@ -1,5 +1,5 @@
 // 万能格式转换：图片、视频、音频、Word / Excel / PPT、PDF 之间的各种格式转换，
-// 还能改尺寸、裁成固定像素、压缩到指定大小、合并拆分 PDF。原生 Windows 程序，全部在本机完成。
+// 还能改尺寸、裁成固定像素、压缩到指定大小、合并拆分 PDF。原生 Windows / macOS 程序，全部在本机完成。
 package main
 
 import (
@@ -25,14 +25,15 @@ func init() {
 }
 
 func main() {
+	args := launchArgs(os.Args[1:])
 	// 命令行模式：万能格式转换.exe -to img:jpg [-o 输出文件夹] [-set 键=值 …] 文件…
-	if isCLI(os.Args[1:]) {
-		os.Exit(runCLI(os.Args[1:]))
+	if isCLI(args) {
+		os.Exit(runCLI(args))
 	}
 	showVersion := flag.Bool("version", false, "显示版本号")
 	flag.StringVar(&shotFile, "shot", "", "")
 	flag.StringVar(&shotSteps, "steps", "", "")
-	flag.Parse()
+	flag.CommandLine.Parse(args)
 	if *showVersion {
 		fmt.Println(version)
 		return
@@ -42,6 +43,17 @@ func main() {
 		return
 	}
 	runApp(files)
+}
+
+// launchArgs 去掉老版本 macOS 从访达打开程序时附带的 -psn_0_12345 参数（不认识的参数会让程序直接退出）
+func launchArgs(args []string) []string {
+	out := args[:0:0]
+	for _, a := range args {
+		if !strings.HasPrefix(a, "-psn_") {
+			out = append(out, a)
+		}
+	}
+	return out
 }
 
 // isCLI 参数里出现命令行模式的选项（-to、-o、-set、-q、-list、-h，也可以写成 --to、-to=xx）时不开窗口

@@ -1,6 +1,6 @@
 // Package tools 找到随程序一起发布的转换引擎（ffmpeg、ImageMagick、pdfium），并在后台运行它们。
 //
-// 发布包里的目录结构：
+// Windows 发布包里的目录结构（macOS 的「万能格式转换.app」见 tools_unix.go）：
 //
 //	万能格式转换.exe
 //	tools\ffmpeg\ffmpeg.exe、ffprobe.exe 和一堆 dll
@@ -71,31 +71,32 @@ func path(parts ...string) string {
 	return filepath.Join(append([]string{r}, parts...)...)
 }
 
-func FFmpeg() string    { return path("ffmpeg", "ffmpeg.exe") }
-func FFprobe() string   { return path("ffmpeg", "ffprobe.exe") }
-func Magick() string    { return path("magick", "magick.exe") }
-func PdfiumDLL() string { return path("pdfium", "pdfium.dll") }
+func exists(p string) bool {
+	_, err := os.Stat(p)
+	return err == nil
+}
 
 // Need 检查某个引擎在不在，不在时返回给用户看的错误
 func Need(file string) error {
 	if _, err := os.Stat(file); err != nil {
 		name := strings.TrimSuffix(filepath.Base(file), filepath.Ext(file))
-		return conv.Fail("缺少转换组件 "+name, "请把下载的压缩包完整解压，tools 文件夹要和程序放在一起")
+		return conv.Fail("缺少转换组件 "+name, missingHint)
 	}
 	return nil
+}
+
+// isMagick 判断是不是 ImageMagick 的主程序
+func isMagick(exe string) bool {
+	b := filepath.Base(exe)
+	return strings.EqualFold(b, "magick.exe") || b == "magick"
 }
 
 // Command 准备运行一个外部程序：不弹黑色窗口，ImageMagick 只用自带的配置
 func Command(ctx context.Context, exe string, args ...string) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, exe, args...)
 	hideWindow(cmd)
-	if strings.EqualFold(filepath.Base(exe), "magick.exe") {
-		dir := filepath.Dir(exe)
-		cmd.Env = append(os.Environ(),
-			"MAGICK_HOME="+dir,
-			"MAGICK_CONFIGURE_PATH="+dir,
-			"MAGICK_CODER_MODULE_PATH="+dir,
-		)
+	if isMagick(exe) {
+		cmd.Env = append(os.Environ(), magickEnv(exe)...)
 	}
 	cmd.WaitDelay = 0
 	return cmd

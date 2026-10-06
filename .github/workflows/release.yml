@@ -1,8 +1,17 @@
-# 推送 v* 标签就构建 Windows 版发布包，发布成 Release。
+# 推送 v* 标签就构建 Windows 版和 macOS 版发布包，发布成 Release。
 # 发版步骤：在 CHANGELOG.md 顶部写好这一版的说明（标题形如「## v1.2.0」），
 # 提交后 git tag v1.2.0 && git push origin v1.2.0。
 #
 # 手动运行（workflow_dispatch）只构建、把产物存成 artifact，不发 Release，用来检查流程本身。
+#
+# 资产名不能改，工具库靠里面的 win-x64 / mac-arm64 给访客挑对的安装包：
+#   OmniConvert-win-x64.zip     Windows（在 Ubuntu 上交叉编译）
+#   OmniConvert-mac-arm64.zip   macOS，Apple 芯片（在 macOS 上编译、打包成 .app，并用打包好的程序做一遍功能测试）
+#   SHA256SUMS.txt              两个包的校验和
+#
+# publish 用 `if: always()` 自己判断：只要 Windows 的包成了就发布。
+# 光写 needs 的话，mac 那条一失败 publish 就会被悄悄跳过，标签在、Release 却没有。
+# mac 的 job 不加 continue-on-error：它失败了整个运行就是红的，一眼能看到。
 
 name: release
 
@@ -14,6 +23,14 @@ on:
 permissions:
   contents: write
 
+defaults:
+  run:
+    shell: bash
+
+env:
+  LC_ALL: en_US.UTF-8
+  LANG: en_US.UTF-8
+
 jobs:
   test:
     runs-on: windows-latest
@@ -23,12 +40,11 @@ jobs:
         with:
           go-version: stable
       - name: fetch tools
-        shell: bash
         run: bash scripts/fetch-tools.sh
       - run: go vet ./...
       - run: go test -short ./...
 
-  release:
+  windows:
     needs: test
     runs-on: ubuntu-latest
     steps:
@@ -47,24 +63,88 @@ jobs:
           if [ "$GITHUB_REF_TYPE" = tag ]; then ver="${GITHUB_REF_NAME#v}"; fi
           bash scripts/build.sh "$ver"
 
-      - name: upload artifact
-        if: github.ref_type != 'tag'
-        uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v5
         with:
-          name: dist
-          path: dist/*
+          name: pkg-win
+          path: |
+            dist/OmniConvert-win-x64.zip
+            dist/SHA256SUMS.txt
+          if-no-files-found: error
+
+  mac:
+    # 只做 Apple 芯片的包（GitHub 已经没有 Intel 的 macOS 机器了）
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+
+      - name: fetch tools
+        run: bash scripts/fetch-tools-mac.sh
+
+      - run: go vet ./...
+      - run: go test -short ./...
+
+      - name: build
+        run: |
+          ver=dev
+          if [ "$GITHUB_REF_TYPE" = tag ]; then ver="${GITHUB_REF_NAME#v}"; fi
+          bash scripts/build-mac.sh "$ver"
+
+      # Word / Excel / PPT 那几项要用 LibreOffice；装不上就跳过那几项，不影响发布
+      - name: install LibreOffice
+        run: brew install --cask libreoffice || echo "LibreOffice 没装上，跳过相关测试"
+
+      # 像用户那样解压，再用解压出来的程序把主要功能转一遍（不靠 Homebrew 里的任何东西）
+      - name: smoke test
+        run: |
+          rm -rf "$RUNNER_TEMP/user" && mkdir -p "$RUNNER_TEMP/user"
+          ditto -x -k dist/OmniConvert-mac-arm64.zip "$RUNNER_TEMP/user"
+          codesign --verify --deep --strict --verbose=2 "$RUNNER_TEMP/user/万能格式转换.app"
+          sudo mv /opt/homebrew /opt/homebrew-hidden
+          [ -d /usr/local/Cellar ] && sudo mv /usr/local/Cellar /usr/local/Cellar-hidden || true
+          rm -rf tools
+          bash scripts/mac/smoke.sh "$RUNNER_TEMP/user/万能格式转换.app" "$RUNNER_TEMP/smoke"
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: pkg-mac
+          path: |
+            dist/OmniConvert-mac-arm64.zip
+            dist/SHA256SUMS-mac.txt
+          if-no-files-found: error
+
+  publish:
+    needs: [windows, mac]
+    if: always() && github.ref_type == 'tag' && needs.windows.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/download-artifact@v5
+        continue-on-error: true
+        with:
+          path: dl
 
       - name: publish release
-        if: github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
           tag="$GITHUB_REF_NAME"
+          mkdir -p out
+          find dl -name '*.zip' -exec cp {} out/ \;
+          cat $(find dl -name 'SHA256SUMS*.txt' | sort) > out/SHA256SUMS.txt
+          ls -l out
+          cat out/SHA256SUMS.txt
           # 从 CHANGELOG.md 里取出「## <tag>」这一节作为 Release 说明
           awk -v t="## $tag" 'index($0, t) == 1 { p = 1; next } /^## / { p = 0 } p' CHANGELOG.md > notes.md
           [ -s notes.md ] || echo "万能格式转换 $tag" > notes.md
           if gh release view "$tag" > /dev/null 2>&1; then
-            gh release upload "$tag" dist/* --clobber
+            gh release upload "$tag" out/* --clobber
           else
-            gh release create "$tag" dist/* --title "万能格式转换 $tag" --notes-file notes.md
+            gh release create "$tag" out/* --title "万能格式转换 $tag" --notes-file notes.md
           fi

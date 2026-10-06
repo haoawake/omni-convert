@@ -1,6 +1,7 @@
 package catalog
 
 import (
+	"runtime"
 	"strconv"
 
 	"github.com/haoawake/omni-convert/internal/conv"
@@ -219,10 +220,24 @@ func videoRows(codecs []Choice) []Row {
 		trimRow(),
 		Row{Label: "声音", Fields: []Field{{Key: conv.OptMute, Type: Check, Label: "去掉声音"}}},
 		Row{Label: "加速", ShowIf: func(conv.Options) bool { return GPUAvailable() }, Fields: []Field{
-			{Key: conv.OptGPU, Type: Check, Label: "用显卡加速（快很多，同样画质下文件稍大）"},
+			{Key: conv.OptGPU, Type: Check, Label: gpuLabel()},
 		}},
 	)
 	return rows
+}
+
+func slideNote() string {
+	if runtime.GOOS == "darwin" {
+		return "每一页做成一个画面，按这个时间自动翻页（PPT 里的动画不会保留）"
+	}
+	return "PPT 里设置过切换时间和动画的按原样播放"
+}
+
+func gpuLabel() string {
+	if runtime.GOOS == "darwin" {
+		return "用硬件编码加速（快很多，同样画质下文件稍大）"
+	}
+	return "用显卡加速（快很多，同样画质下文件稍大）"
 }
 
 func animRows(defFPS string) []Row {
@@ -373,7 +388,9 @@ func init() {
 	at("wma", "WMA", "Windows 老格式")
 	at("aiff", "AIFF", "苹果的无损格式")
 	at("ac3", "AC3", "杜比数字，家庭影院用")
-	at("amr", "AMR", "手机录音、语音备忘格式（8kHz 单声道）")
+	if runtime.GOOS != "darwin" { // macOS 版的 FFmpeg 没有 AMR 编码器（专利原因），系统自带的也编码不了
+		at("amr", "AMR", "手机录音、语音备忘格式（8kHz 单声道）")
+	}
 	at("m4r", "苹果铃声", "iPhone 铃声（.m4r），超过 40 秒会自动截取前 40 秒")
 
 	doc := &Page{Kind: conv.Doc, Title: "文档转换", Sub: "Word、Excel、PPT、TXT、Markdown、网页互转，也能转成 PDF、图片和长图。"}
@@ -394,7 +411,7 @@ func init() {
 	docTarget(doc, "png", "图片", "每一页转成一张 PNG 图片", dpiRow(), Row{Label: "页码", Fields: []Field{pagesField()}})
 	docTarget(doc, "long", "长图", "所有页拼成一张长图，方便手机上看、发朋友圈", longRow(), Row{Label: "页码", Fields: []Field{pagesField()}})
 	docTarget(doc, "mp4", "视频", "把 PPT 做成 MP4 视频，自动翻页",
-		Row{Label: "每页停留", Fields: []Field{{Key: conv.OptSlideSec, Type: Number, Width: 64, Default: "5", Unit: "秒"}}, Note: "PPT 里设置过切换时间和动画的按原样播放"})
+		Row{Label: "每页停留", Fields: []Field{{Key: conv.OptSlideSec, Type: Number, Width: 64, Default: "5", Unit: "秒"}}, Note: slideNote()})
 
 	pdf := &Page{Kind: conv.PDF, Title: "PDF 工具", Sub: "PDF 转 Word、Excel、PPT、图片、长图，还能合并、拆分、压缩、加密和解密。"}
 	pt := func(id, label, hint, lane string, tool, batch bool, rows ...Row) {

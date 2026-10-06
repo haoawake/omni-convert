@@ -8,7 +8,6 @@ package main
 import (
 	"math"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -20,7 +19,6 @@ import (
 	"golang.org/x/sys/windows"
 
 	"github.com/haoawake/omni-convert/internal/catalog"
-	"github.com/haoawake/omni-convert/internal/conv"
 )
 
 // 自定义消息
@@ -41,30 +39,6 @@ type fonts struct {
 	ui, uiBold, small, smallBold, title, nav, navBold, chip, icon, iconSmall, iconBig, iconNav uintptr
 }
 
-// item 是文件列表里的一行
-type item struct {
-	path    string
-	size    int64
-	task    *conv.Task // 最近一次转换
-	key     string     // 最近一次转换用的目标和选项，没变就不重复转
-	outText string     // 转换结果的说明（完成后算一次）
-}
-
-// pageState 是左侧每一页各自的状态
-type pageState struct {
-	page   *catalog.Page
-	target *catalog.Target
-	opts   conv.Options
-	items  []*item
-}
-
-// session 是点一次「开始转换」启动的一批任务
-type session struct {
-	tasks   []*conv.Task
-	page    int
-	started time.Time
-}
-
 type app struct {
 	hwnd    uintptr
 	dpi     int32
@@ -73,14 +47,8 @@ type app struct {
 	icons   string
 	appIcon uintptr
 
-	pages  []*pageState
-	cur    int
-	runner *conv.Runner
-	sess   *session
-	frame  int
-
-	outMode string // source = 和原文件放在一起；custom = 指定文件夹
-	outDir  string
+	core  // 每一页的文件和设置、正在进行的转换、保存位置（app_core.go）
+	frame int
 
 	toast       string
 	toastErr    bool
@@ -122,28 +90,13 @@ func runApp(initial []string) {
 	pInitCommonControlsEx.Call(uintptr(unsafe.Pointer(&icc)))
 	startGdiplus()
 
-	a := &app{edits: map[string]uintptr{}, cues: map[uintptr]string{}, outMode: "source"}
+	a := &app{edits: map[string]uintptr{}, cues: map[uintptr]string{}}
 	theApp = a
 	a.icons = "Segoe Fluent Icons"
 	if !fontExists(a.icons) {
 		a.icons = "Segoe MDL2 Assets"
 	}
-	for _, p := range catalog.Pages {
-		a.pages = append(a.pages, &pageState{page: p, target: p.Targets[0], opts: conv.Options{}})
-	}
-	// 默认目标：图片 JPG、视频 MP4、音频 MP3、文档 PDF、PDF 转 Word
-	for i, id := range []string{"img:jpg", "vid:mp4", "aud:mp3", "doc:pdf", "pdf:docx"} {
-		if t := catalog.ByID(id); t != nil {
-			a.pages[i].target = t
-		}
-	}
-	a.loadSettings()
-	for _, ps := range a.pages {
-		ps.target.Defaults(ps.opts)
-	}
-	a.runner = conv.NewRunner(map[string]int{
-		"image": 4, "video": 2, "audio": 3, "office": 1, "pdf": 2,
-	}, func(*conv.Task) {
+	a.initCore(func() {
 		if !a.dirty.Swap(true) {
 			postMessage(a.hwnd, wmTaskUpdate, 0, 0)
 		}
@@ -198,8 +151,6 @@ func runApp(initial []string) {
 	a.saveSettings()
 	catalog.Shutdown()
 }
-
-func (a *app) page() *pageState { return a.pages[a.cur] }
 
 func (a *app) placeWindow() {
 	mon, _, _ := pMonitorFromWindow.Call(a.hwnd, 2)
@@ -686,19 +637,10 @@ func (a *app) scrollOptions(dy int32) {
 
 // ---------------------------------------------------------------- 添加文件
 
-const maxFolderFiles = 5000
-
 // addFiles 把文件（或文件夹里的所有文件）加进列表。能放进当前页的放当前页，
 // 其余的按类型放进对应的页；如果当前页一个都放不了，就切到放得最多的那一页。
 func (a *app) addFiles(paths []string, switchPage bool) {
-	hasDir := false
-	for _, p := range paths {
-		if fi, err := os.Stat(p); err == nil && fi.IsDir() {
-			hasDir = true
-			break
-		}
-	}
-	if !hasDir {
+	if !hasDir(paths) {
 		a.addResolved(paths, false, switchPage)
 		return
 	}
@@ -712,51 +654,6 @@ func (a *app) addFiles(paths []string, switchPage bool) {
 		a.foundMu.Unlock()
 		postMessage(a.hwnd, wmFilesFound, 0, 0)
 	}()
-}
-
-type foundFiles struct {
-	files      []string
-	tooMany    bool
-	switchPage bool
-}
-
-// collectFiles 展开文件夹，找出里面所有认识的文件（跳过隐藏文件夹），最多 maxFolderFiles 个
-func collectFiles(paths []string) ([]string, bool) {
-	var files []string
-	tooMany := false
-	for _, p := range paths {
-		fi, err := os.Stat(p)
-		if err != nil {
-			continue
-		}
-		if !fi.IsDir() {
-			files = append(files, p)
-			continue
-		}
-		filepath.WalkDir(p, func(path string, d os.DirEntry, err error) error {
-			if err != nil {
-				return nil
-			}
-			if d.IsDir() {
-				if path != p && (strings.HasPrefix(d.Name(), ".") || strings.HasPrefix(d.Name(), "$")) {
-					return filepath.SkipDir
-				}
-				return nil
-			}
-			if _, ok := conv.KindOf(path); ok {
-				if len(files) >= maxFolderFiles {
-					tooMany = true
-					return filepath.SkipAll
-				}
-				files = append(files, path)
-			}
-			return nil
-		})
-		if tooMany {
-			break
-		}
-	}
-	return files, tooMany
 }
 
 // onFilesFound 后台找完文件夹里的文件后，在界面线程上加进列表
@@ -773,88 +670,14 @@ func (a *app) onFilesFound() {
 
 // addResolved 把一批文件（已经展开了文件夹）加进列表
 func (a *app) addResolved(files []string, tooMany, switchPage bool) {
-	seen := make([]map[string]bool, len(a.pages))
-	for i, ps := range a.pages {
-		seen[i] = make(map[string]bool, len(ps.items))
-		for _, it := range ps.items {
-			seen[i][strings.ToLower(it.path)] = true
-		}
-	}
-	added := make([]int, len(a.pages))
-	unknown, dup := 0, 0
-	curFirst := false
-	for _, f := range files {
-		dest := -1
-		if a.page().page.Accepts(f) {
-			dest = a.cur
-		} else if k, ok := conv.KindOf(f); ok {
-			for i, ps := range a.pages {
-				if ps.page.Kind == k {
-					dest = i
-				}
-			}
-		}
-		if dest < 0 {
-			unknown++
-			continue
-		}
-		ps := a.pages[dest]
-		if key := strings.ToLower(f); seen[dest][key] {
-			dup++
-			continue
-		} else {
-			seen[dest][key] = true
-		}
-		var size int64
-		if fi, err := os.Stat(f); err == nil {
-			size = fi.Size()
-		}
-		ps.items = append(ps.items, &item{path: f, size: size})
-		added[dest]++
-		if dest == a.cur {
-			curFirst = true
-		}
-	}
-	total := 0
-	best := a.cur
-	for i, n := range added {
-		total += n
-		if n > added[best] {
-			best = i
-		}
-	}
-	if switchPage && !curFirst && total > 0 {
-		a.cur = best
+	msg, isErr, switched := a.core.addResolved(files, tooMany, switchPage)
+	if switched {
 		a.optScroll = 0
 		a.syncEdits()
 	}
 	a.lv.setItems(a.page().items, a.page().target)
-	// 提示
-	var parts []string
-	if total > 0 {
-		msg := "已添加 " + itoa(total) + " 个文件"
-		var where []string
-		for i, n := range added {
-			if n > 0 && i != a.cur {
-				where = append(where, a.pages[i].page.Kind.Name()+" "+itoa(n)+" 个")
-			}
-		}
-		if len(where) > 0 {
-			msg += "（其中" + strings.Join(where, "、") + "放在对应的页里）"
-		}
-		parts = append(parts, msg)
-	}
-	if dup > 0 {
-		parts = append(parts, itoa(dup)+" 个已经在列表里了")
-	}
-	if unknown > 0 {
-		parts = append(parts, itoa(unknown)+" 个文件不认识，跳过了")
-	}
-	if tooMany {
-		parts = append(parts, "文件夹里文件太多，只加了前 "+itoa(maxFolderFiles)+" 个")
-	}
-	if len(parts) > 0 {
-		a.showToast(strings.Join(parts, "，"), total == 0, "")
+	if msg != "" {
+		a.showToast(msg, isErr, "")
 	}
 	a.layout()
 	invalidate(a.hwnd, nil)
@@ -885,40 +708,19 @@ func (a *app) clearList() {
 		if r != idOK {
 			return
 		}
-		for _, it := range ps.items {
-			if it.task != nil {
-				a.runner.Cancel(it.task)
-			}
-		}
 	}
-	ps.items = nil
+	a.clearPage()
 	a.lv.setItems(nil, ps.target)
 	a.layout()
 	invalidate(a.hwnd, nil)
-}
-
-func (a *app) pageBusy(ps *pageState) bool {
-	for _, it := range ps.items {
-		if it.task != nil {
-			if s := a.runner.Snapshot(it.task).State; s == conv.Waiting || s == conv.Running {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 // ---------------------------------------------------------------- 开始转换
 
 // startOrStop 当前页有任务在跑时停止这一页的任务，否则开始转换（别的页的任务不受影响）
 func (a *app) startOrStop() {
-	ps := a.page()
-	if a.pageBusy(ps) {
-		for _, it := range ps.items {
-			if it.task != nil {
-				a.runner.Cancel(it.task)
-			}
-		}
+	if a.pageBusy(a.page()) {
+		a.stopPage()
 		a.layout()
 		invalidate(a.hwnd, nil)
 		return
@@ -926,145 +728,29 @@ func (a *app) startOrStop() {
 	a.start(nil)
 }
 
-func (a *app) runKey(t *catalog.Target, opt conv.Options) string {
-	k := t.ID + "|" + opt.String() + "|" + a.outMode
-	if a.outMode == "custom" {
-		k += "|" + a.outDir
-	}
-	return k
-}
-
-// start 开始转换当前页列表里还没转过的文件；only 不为 nil 时只转这一个。
-// 合并类的目标（合并 PDF、图片合成 PDF）总是把列表里所有能用的文件按当前顺序合成一个。
+// start 开始转换当前页列表里还没转过的文件；only 不为 nil 时只转这一个（见 core.start）
 func (a *app) start(only *item) {
-	ps := a.page()
-	t := ps.target
-	if len(ps.items) == 0 {
+	r := a.core.start(only)
+	switch r.kind {
+	case startNeedFiles:
 		a.addFilesDialog()
 		return
-	}
-	opt := t.Prepare(ps.opts)
-	if msg := t.Check(opt); msg != "" {
-		showMessage(a.hwnd, tdWarningIcon, appName, msg, "")
+	case startWarn:
+		showMessage(a.hwnd, tdWarningIcon, appName, r.msg, r.detail)
+		return
+	case startError:
+		showMessage(a.hwnd, tdErrorIcon, appName, r.msg, r.detail)
+		return
+	case startToast:
+		a.showToast(r.msg, false, "")
 		return
 	}
-	if a.outMode == "custom" {
-		if err := os.MkdirAll(a.outDir, 0o755); err != nil || !writable(a.outDir) {
-			showMessage(a.hwnd, tdErrorIcon, appName, "没法把结果保存到这个文件夹", a.outDir+"\n\n请在下面的「保存到」里换一个文件夹。")
-			return
-		}
-	}
-	key := a.runKey(t, opt)
-	var accepted []*item
-	for _, it := range ps.items {
-		if t.Accept(it.path) && (only == nil || it == only || t.Batch) {
-			accepted = append(accepted, it)
-		}
-	}
-	if len(accepted) == 0 {
-		showMessage(a.hwnd, tdWarningIcon, appName, "列表里没有能转成「"+t.Label+"」的文件", "换一个目标格式，或者添加别的文件。")
-		return
-	}
-	busy := func(it *item) bool {
-		if it.task == nil {
-			return false
-		}
-		s := a.runner.Snapshot(it.task).State
-		return s == conv.Waiting || s == conv.Running
-	}
-	done := func(it *item) bool {
-		return it.task != nil && it.key == key && a.runner.Snapshot(it.task).State == conv.Done
-	}
-	var todo []*item
-	if t.Batch {
-		// 合并的结果取决于有哪些文件、什么顺序，都写进 key 里：加了文件、调了顺序就会重新合并
-		var paths []string
-		for _, it := range accepted {
-			if busy(it) {
-				a.showToast("正在合并，等它完成或者先停止", false, "")
-				return
-			}
-			paths = append(paths, it.path)
-		}
-		key += "|" + strings.Join(paths, "\n")
-		all := only == nil
-		for _, it := range accepted {
-			all = all && done(it)
-		}
-		if all && only == nil {
-			a.showToast("这些文件已经用同样的设置合并过了；改了设置或顺序再点就会重新合并", false, "")
-			return
-		}
-		todo = accepted
-	} else {
-		for _, it := range accepted {
-			if !busy(it) && !done(it) {
-				todo = append(todo, it)
-			}
-		}
-		if len(todo) == 0 {
-			a.showToast("这些文件已经用同样的设置转换过了；改了设置再点就会重新转换", false, "")
-			return
-		}
-	}
-	if t.ID == "pdf:merge" && len(todo) < 2 {
-		showMessage(a.hwnd, tdWarningIcon, appName, "至少要两个 PDF 才能合并", "")
-		return
-	}
-	sess := a.sess
-	if sess == nil {
-		sess = &session{page: a.cur, started: time.Now()}
-	}
-	dirs := map[string]string{} // 同一个文件夹只检查一次能不能写
-	outDir := func(in string) string {
-		d := filepath.Dir(in)
-		if v, ok := dirs[d]; ok {
-			return v
-		}
-		v := a.outDirFor(in)
-		dirs[d] = v
-		return v
-	}
-	if t.Batch {
-		var paths []string
-		for _, it := range todo {
-			paths = append(paths, it.path)
-		}
-		task := &conv.Task{Job: conv.NewJob(paths, t.ID, opt, outDir(paths[0]), nil), Lane: t.Lane, Run: t.Run}
-		for _, it := range todo {
-			it.task, it.key, it.outText = task, key, ""
-		}
-		sess.tasks = append(sess.tasks, task)
-		a.runner.Submit(task)
-	} else {
-		for _, it := range todo {
-			task := &conv.Task{Job: conv.NewJob([]string{it.path}, t.ID, opt.Clone(), outDir(it.path), nil), Lane: t.Lane, Run: t.Run, Tag: it}
-			it.task, it.key, it.outText = task, key, ""
-			sess.tasks = append(sess.tasks, task)
-			a.runner.Submit(task)
-		}
-	}
-	a.sess = sess
 	a.toast = ""
 	keepAwake(true)
 	pSetTimer.Call(a.hwnd, timerBusy, 120, 0)
 	a.saveSettings()
 	a.layout()
 	invalidate(a.hwnd, nil)
-}
-
-// outDirFor 决定输出文件放哪：默认和原文件放在一起；那里不能写时放到「文档\万能格式转换」
-func (a *app) outDirFor(input string) string {
-	if a.outMode == "custom" && a.outDir != "" {
-		return a.outDir
-	}
-	dir := filepath.Dir(input)
-	if writable(dir) {
-		return dir
-	}
-	d := defaultOutDir()
-	os.MkdirAll(d, 0o755)
-	return d
 }
 
 func (a *app) onTaskUpdate() {
@@ -1091,47 +777,9 @@ func (a *app) onTaskUpdate() {
 	keepAwake(false)
 	setWindowText(a.hwnd, appName)
 	setTaskbarProgress(a.hwnd, -1, false)
-	ok, failed, stopped := 0, 0, 0
-	var outs []string
-	seen := map[*conv.Task]bool{}
-	for _, t := range a.sess.tasks {
-		if seen[t] {
-			continue
-		}
-		seen[t] = true
-		info := a.runner.Snapshot(t)
-		switch info.State {
-		case conv.Done:
-			ok += len(t.Job.Inputs)
-			outs = append(outs, info.Outputs...)
-		case conv.Failed:
-			failed += len(t.Job.Inputs)
-		default:
-			stopped += len(t.Job.Inputs)
-		}
-	}
-	a.sess = nil
+	msg, isErr, action := a.finishSession()
 	a.lv.refresh()
-	var msg string
-	switch {
-	case failed == 0 && stopped == 0:
-		msg = "全部完成，转换了 " + itoa(ok) + " 个文件"
-	case ok == 0 && failed == 0:
-		msg = "已停止"
-	default:
-		msg = "完成 " + itoa(ok) + " 个"
-		if failed > 0 {
-			msg += "，失败 " + itoa(failed) + " 个（原因见列表）"
-		}
-		if stopped > 0 {
-			msg += "，停止 " + itoa(stopped) + " 个"
-		}
-	}
-	action := ""
-	if len(outs) > 0 {
-		action = outs[0]
-	}
-	a.showToast(msg, failed > 0 && ok == 0, action)
+	a.showToast(msg, isErr, action)
 	flashWindow(a.hwnd)
 	a.layout()
 	invalidate(a.hwnd, nil)
@@ -1215,36 +863,6 @@ func (a *app) toggleContextMenu() {
 	} else {
 		a.showToast("已从右键菜单里去掉", false, "")
 	}
-}
-
-func itoa(n int) string { return formatCount(int64(n)) }
-
-// overallProgress 这一批任务的总进度（0~1）
-func (a *app) overallProgress() float64 {
-	if a.sess == nil {
-		return 0
-	}
-	seen := map[*conv.Task]bool{}
-	var sum float64
-	n := 0
-	for _, t := range a.sess.tasks {
-		if seen[t] {
-			continue
-		}
-		seen[t] = true
-		n++
-		info := a.runner.Snapshot(t)
-		switch info.State {
-		case conv.Done, conv.Failed, conv.Cancelled:
-			sum++
-		case conv.Running:
-			sum += max(info.Progress.Frac, 0)
-		}
-	}
-	if n == 0 {
-		return 0
-	}
-	return sum / float64(n)
 }
 
 // keepAwake 转换期间不让电脑自动睡眠（屏幕照常可以关）

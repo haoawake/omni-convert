@@ -6,7 +6,6 @@ package main
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"unsafe"
@@ -230,111 +229,21 @@ func (lv *fileList) selectAll() {
 	sendMessage(lv.hwnd, lvmSetItemState, ^uintptr(0), uintptr(unsafe.Pointer(&item)))
 }
 
-// ---------------------------------------------------------------- 每一行显示什么
-
-func (a *app) rowState(it *item) (state string, color rgb, frac float64, running bool) {
-	t := a.page().target
-	if it.task == nil {
-		if !t.Accept(it.path) {
-			return "不支持", cText3, 0, false
-		}
-		return "等待开始", cText3, 0, false
+// toneRGB 把文字的颜色换成具体的色值
+func toneRGB(t tone) rgb {
+	switch t {
+	case toneText2:
+		return cText2
+	case toneText3:
+		return cText3
+	case toneAccent:
+		return cAccent
+	case toneOK:
+		return cOK
+	case toneDanger:
+		return cDanger
 	}
-	info := a.runner.Snapshot(it.task)
-	switch info.State {
-	case conv.Waiting:
-		return "排队中", cText2, 0, false
-	case conv.Running:
-		return "", cAccent, info.Progress.Frac, true
-	case conv.Done:
-		return "✓ 完成", cOK, 1, false
-	case conv.Failed:
-		return "✗ 失败", cDanger, 0, false
-	default:
-		return "已停止", cText3, 0, false
-	}
-}
-
-func (a *app) rowResult(it *item) string {
-	t := a.page().target
-	if it.task == nil {
-		if !t.Accept(it.path) {
-			return "这种文件不能转成「" + t.Label + "」"
-		}
-		return ""
-	}
-	info := a.runner.Snapshot(it.task)
-	switch info.State {
-	case conv.Running:
-		note := info.Progress.Note
-		if note == "" {
-			note = "正在转换…"
-		}
-		return note
-	case conv.Done:
-		if it.outText == "" {
-			it.outText = describeOutputs(info.Outputs, info.Progress.Note)
-		}
-		return it.outText
-	case conv.Failed:
-		return errText(info.Err)
-	}
-	return ""
-}
-
-func errText(err error) string {
-	if err == nil {
-		return ""
-	}
-	if ue, ok := err.(*conv.UserError); ok {
-		return ue.Msg
-	}
-	s := err.Error()
-	if i := strings.IndexByte(s, '\n'); i >= 0 {
-		s = s[:i]
-	}
-	return s
-}
-
-// describeOutputs 写成「照片 (1).jpg · 230 KB」或「照片（12 个文件）」
-func describeOutputs(outs []string, note string) string {
-	if len(outs) == 0 {
-		return note
-	}
-	var parts []string
-	for _, o := range outs {
-		fi, err := os.Stat(o)
-		if err != nil {
-			continue
-		}
-		if fi.IsDir() {
-			n := 0
-			var size int64
-			filepath.WalkDir(o, func(p string, d os.DirEntry, err error) error {
-				if err == nil && !d.IsDir() {
-					n++
-					if i, e := d.Info(); e == nil {
-						size += i.Size()
-					}
-				}
-				return nil
-			})
-			parts = append(parts, fmt.Sprintf("%s\\（%d 个文件，%s）", filepath.Base(o), n, humanSize(size)))
-		} else {
-			parts = append(parts, filepath.Base(o)+" · "+humanSize(fi.Size()))
-		}
-	}
-	s := strings.Join(parts, "；")
-	if len(parts) > 3 {
-		s = fmt.Sprintf("%s 等 %d 个文件", parts[0], len(parts))
-	}
-	if i := strings.Index(note, "，第 "); i > 0 {
-		note = note[:i] // 去掉「第 2 遍（共 2 遍）」这种过程中的进度
-	}
-	if note != "" && !strings.HasPrefix(note, "正在") && !strings.HasPrefix(note, "第") && !strings.HasSuffix(note, "…") {
-		s += "（" + note + "）" // 比如「从 12 MB 压缩到 3 MB」「只保留前 40 秒」
-	}
-	return "→ " + s
+	return cText
 }
 
 // ---------------------------------------------------------------- 通知
@@ -388,24 +297,16 @@ func (a *app) onListNotify(lp uintptr) (uintptr, bool) {
 				return cdrfDoDefault, true
 			}
 			it := lv.items[i]
+			name, result := a.rowTones(it)
 			switch cd.SubItem {
 			case colState:
 				a.drawState(cd, it)
 				return cdrfSkipDefault, true
 			case colResult:
-				if it.task != nil && a.runner.Snapshot(it.task).State == conv.Failed {
-					cd.TextColor = uint32(cDanger.colorref())
-				} else if !a.page().target.Accept(it.path) && it.task == nil {
-					cd.TextColor = uint32(cText3.colorref())
-				} else {
-					cd.TextColor = uint32(cText2.colorref())
-				}
+				cd.TextColor = uint32(toneRGB(result).colorref())
 				return cdrfNewFont, true
 			default:
-				cd.TextColor = uint32(cText.colorref())
-				if it.task == nil && !a.page().target.Accept(it.path) {
-					cd.TextColor = uint32(cText3.colorref())
-				}
+				cd.TextColor = uint32(toneRGB(name).colorref())
 				return cdrfNewFont, true
 			}
 		}
@@ -457,7 +358,8 @@ func (a *app) drawState(cd *nmLVCustomDraw, it *item) {
 	selected := cd.ItemState&0x1 != 0 // CDIS_SELECTED
 	_ = selected
 	s := lv.scale
-	label, color, frac, running := a.rowState(it)
+	label, tn, frac, running := a.rowState(it)
+	color := toneRGB(tn)
 	pad := int32(6 * s)
 	if !running {
 		textLine(cd.Hdc, lv.font, label, rect{r.Left + pad, r.Top, r.Right - pad, r.Bottom}, color, dtLeft)
@@ -534,14 +436,8 @@ func (a *app) openItem(it *item) {
 }
 
 func (a *app) showError(it *item, err error) {
-	detail := ""
-	if ue, ok := err.(*conv.UserError); ok {
-		detail = ue.Detail
-	} else if err != nil {
-		detail = err.Error()
-	}
 	(&taskDialog{title: appName, instruction: filepath.Base(it.path) + " 没有转换成功", content: errText(err),
-		expanded: detail, icon: tdErrorIcon, buttons: []tdButton{{idOK, "知道了"}}}).show(a.hwnd)
+		expanded: errDetail(err), icon: tdErrorIcon, buttons: []tdButton{{idOK, "知道了"}}}).show(a.hwnd)
 }
 
 func (a *app) itemMenu() {
@@ -629,18 +525,7 @@ func (a *app) itemMenu() {
 			}
 		}
 	case cmRedo:
-		if it.task != nil && len(it.task.Job.Inputs) > 1 {
-			// 合并出来的文件：整批重新合并
-			for _, other := range a.page().items {
-				if other.task == it.task {
-					other.key = ""
-				}
-			}
-			a.start(nil)
-			break
-		}
-		it.key = "" // 和当前设置对不上，就会重新转
-		a.start(it)
+		a.start(a.prepareRedo(it)) // 合并出来的文件整批重新合并
 	case cmRemove:
 		a.removeSelected()
 	}
@@ -652,11 +537,10 @@ func (a *app) moveSelected(d int) {
 		return
 	}
 	i, j := sel[0], sel[0]+d
-	ps := a.page()
-	if j < 0 || j >= len(ps.items) {
+	if !a.moveItem(i, j) {
 		return
 	}
-	ps.items[i], ps.items[j] = ps.items[j], ps.items[i]
+	ps := a.page()
 	a.lv.setItems(ps.items, ps.target)
 	a.lv.selectOnly(j)
 }
@@ -667,28 +551,11 @@ func (a *app) removeSelected() {
 		return
 	}
 	ps := a.page()
-	drop := map[int]bool{}
-	stoppedMerge := false
-	for _, i := range sel {
-		drop[i] = true
-		if t := ps.items[i].task; t != nil {
-			if s := a.runner.Snapshot(t).State; s == conv.Running || s == conv.Waiting {
-				// 合并任务里的文件被移除：整个合并停下来，调整好后重新开始
-				stoppedMerge = stoppedMerge || len(t.Job.Inputs) > 1
-				a.runner.Cancel(t)
-			}
-		}
-	}
-	if stoppedMerge {
+	// 合并任务里的文件被移除：整个合并停下来，调整好后重新开始
+	if a.removeItems(sel) {
 		a.showToast("已停止合并，调整好列表后再点「开始转换」", false, "")
 	}
-	var keep []*item
-	for i, it := range ps.items {
-		if !drop[i] {
-			keep = append(keep, it)
-		}
-	}
-	ps.items = keep
+	keep := ps.items
 	a.lv.setItems(keep, ps.target)
 	a.lv.selectOnly(min(sel[0], len(keep)-1))
 	a.layout()
