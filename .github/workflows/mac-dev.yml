@@ -13,6 +13,10 @@ defaults:
   run:
     shell: bash
 
+env:
+  LC_ALL: en_US.UTF-8
+  LANG: en_US.UTF-8
+
 jobs:
   mac:
     runs-on: macos-15
@@ -146,6 +150,13 @@ jobs:
         id: build
         continue-on-error: true
         run: bash scripts/build.sh 1.1.0 2>&1 | tee out/build.log
+      - name: compare flaky test with main
+        continue-on-error: true
+        run: |
+          git fetch -q --depth=1 origin main
+          git worktree add -q ../main FETCH_HEAD
+          cp -r tools ../main/tools
+          cd ../main && go test -short -count=1 -run 'TestLockedFile' -v ./internal/pdf/ 2>&1 | tee ../omni-convert/out/main-lockedfile.log
       - name: summary
         if: always()
         run: |

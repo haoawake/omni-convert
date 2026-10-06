@@ -6,10 +6,8 @@ package main
 // 摆好文件列表和选项输入框这些子窗口。画图（paint.go）和鼠标点击都用 a.scene。
 
 import (
-	"fmt"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/haoawake/omni-convert/internal/catalog"
 	"github.com/haoawake/omni-convert/internal/conv"
@@ -232,10 +230,7 @@ func (a *app) layoutContent() {
 	group("工具", tools)
 
 	// 当前目标的说明
-	hint := t.Hint
-	if t.ID == "pdf:docx" && catalog.OfficeInfo() == "" {
-		hint = "没有找到 Word 或 LibreOffice，只能提取文字做成 Word 文档（版面不保留）"
-	}
+	hint := hintFor(t)
 	a.add(widget{id: "hint", kind: wText, r: rect{x0, y, x1, y + a.scale(22)}, text: hint, glyph: gInfo, font: a.f.ui, color: cAccentDark, align: dtLeft})
 	y += a.scale(22) + a.scale(16)
 
@@ -254,29 +249,6 @@ func boolStr(b bool) string {
 		return "1"
 	}
 	return ""
-}
-
-// officeBanner 文档页、PDF 页上说明 Office 的情况
-func (a *app) officeBanner() (string, bool) {
-	k := a.page().page.Kind
-	if k != conv.Doc {
-		return "", false
-	}
-	info := catalog.OfficeInfo()
-	if info == "" {
-		return "没有找到 Microsoft Office、WPS 或 LibreOffice，Word、Excel、PPT 相关的转换做不了（CSV、Markdown 转网页不受影响）。可以安装免费的 LibreOffice：zh-cn.libreoffice.org", true
-	}
-	return "", false
-}
-
-func (a *app) acceptCount(t *catalog.Target) int {
-	n := 0
-	for _, it := range a.page().items {
-		if t.Accept(it.path) {
-			n++
-		}
-	}
-	return n
 }
 
 // ---------------------------------------------------------------- 选项区
@@ -528,27 +500,6 @@ func (a *app) layoutAction() {
 	if a.sess != nil {
 		a.add(widget{id: "status", kind: wText, r: rect{sx + sw + a.scale(20), r.Top, x1 - bw - a.scale(16), r.Bottom}, font: a.f.ui, color: cText2, align: dtRight})
 	}
-}
-
-// statusText 底栏上的进度说明，比如「正在转换 3 / 10 · 1:05」
-func (a *app) statusText() string {
-	if a.sess == nil {
-		return ""
-	}
-	seen := map[*conv.Task]bool{}
-	done, total := 0, 0
-	for _, t := range a.sess.tasks {
-		if seen[t] {
-			continue
-		}
-		seen[t] = true
-		total++
-		if s := a.runner.Snapshot(t).State; s == conv.Done || s == conv.Failed || s == conv.Cancelled {
-			done++
-		}
-	}
-	el := int(time.Since(a.sess.started).Seconds())
-	return fmt.Sprintf("正在转换 %d / %d · %d:%02d", done, total, el/60, el%60)
 }
 
 // ---------------------------------------------------------------- 提示条

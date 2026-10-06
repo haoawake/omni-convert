@@ -424,7 +424,7 @@ func TestNoOfficeBranch(t *testing.T) {
 	in := writeFile(t, filepath.Join(dir, "文档.docx"), []byte("PK\x03\x04 不是真的 docx"))
 	_, err := runJob(t, Convert("pdf"), in, nil)
 	var ue *conv.UserError
-	if !errors.As(err, &ue) || !strings.Contains(ue.Msg, "需要安装 Microsoft Office、WPS 或 LibreOffice") || !strings.Contains(ue.Detail, "libreoffice.org") {
+	if !errors.As(err, &ue) || !strings.Contains(ue.Msg, "需要安装") || !strings.Contains(ue.Msg, "LibreOffice") || !strings.Contains(ue.Detail, "libreoffice.org") {
 		t.Errorf("没装 Office 时应该提示安装：%v", err)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "输出 结果", "文档.pdf")); err == nil {

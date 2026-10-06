@@ -42,14 +42,14 @@ fetch() { # fetch URL 文件 [sha256]
 	fi
 }
 
-echo "下载 FFmpeg $FFMPEG_VER…"
+echo "下载 FFmpeg ${FFMPEG_VER}…"
 fetch "$FFMPEG_BASE/ffmpeg.zip" "$tmp/ffmpeg.zip" "$FFMPEG_SHA"
 fetch "$FFMPEG_BASE/ffprobe.zip" "$tmp/ffprobe.zip" "$FFPROBE_SHA"
 unzip -q -o "$tmp/ffmpeg.zip" -d tools/ffmpeg
 unzip -q -o "$tmp/ffprobe.zip" -d tools/ffmpeg
 chmod +x tools/ffmpeg/ffmpeg tools/ffmpeg/ffprobe
 {
-	echo "FFmpeg $FFMPEG_VER（macOS arm64 静态编译版）"
+	echo "FFmpeg ${FFMPEG_VER}（macOS arm64 静态编译版）"
 	echo "来自 https://ffmpeg.martin-riedl.de ，编译脚本 https://git.martin-riedl.de/ffmpeg/build-script"
 	echo "FFmpeg 按 GPL v3 发布，源码见 https://ffmpeg.org 。编译配置："
 	echo
@@ -93,7 +93,7 @@ while [ ${#queue[@]} -gt 0 ]; do
 		@rpath/*)
 			name=${dep#@rpath/}
 			if [ ! -e "tools/magick/lib/$name" ]; then
-				[ -e "$env/lib/$name" ] || { echo "找不到 $name（$f 要用）" >&2; exit 1; }
+				[ -e "$env/lib/$name" ] || { echo "找不到 ${name}（$f 要用）" >&2; exit 1; }
 				cp -L "$env/lib/$name" "tools/magick/lib/$name"
 				chmod u+w "tools/magick/lib/$name"
 				queue+=("tools/magick/lib/$name")

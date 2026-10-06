@@ -49,7 +49,7 @@ check() {
 	fi
 }
 
-echo "== 准备测试文件（$work）"
+echo "== 准备测试文件（${work}）"
 ff -f lavfi -i "mandelbrot=size=3000x2000" -frames:v 1 -q:v 2 "照片 原图.jpg"
 magick -size 3000x2000 plasma:fractal -quality 95 "花纹 大图.jpg"
 ff -f lavfi -i "testsrc2=size=800x600" -frames:v 1 "截图.png"
