@@ -94,6 +94,10 @@ jobs:
           if [ "$GITHUB_REF_TYPE" = tag ]; then ver="${GITHUB_REF_NAME#v}"; fi
           bash scripts/build-mac.sh "$ver"
 
+      # Word / Excel / PPT 那几项要用 LibreOffice；装不上就跳过那几项，不影响发布
+      - name: install LibreOffice
+        run: brew install --cask libreoffice || echo "LibreOffice 没装上，跳过相关测试"
+
       # 像用户那样解压，再用解压出来的程序把主要功能转一遍（不靠 Homebrew 里的任何东西）
       - name: smoke test
         run: |
@@ -101,6 +105,8 @@ jobs:
           ditto -x -k dist/OmniConvert-mac-arm64.zip "$RUNNER_TEMP/user"
           codesign --verify --deep --strict --verbose=2 "$RUNNER_TEMP/user/万能格式转换.app"
           sudo mv /opt/homebrew /opt/homebrew-hidden
+          [ -d /usr/local/Cellar ] && sudo mv /usr/local/Cellar /usr/local/Cellar-hidden || true
+          rm -rf tools
           bash scripts/mac/smoke.sh "$RUNNER_TEMP/user/万能格式转换.app" "$RUNNER_TEMP/smoke"
 
       - uses: actions/upload-artifact@v5

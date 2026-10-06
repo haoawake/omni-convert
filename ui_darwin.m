@@ -390,7 +390,10 @@ static void configureCell(NSTableCellView *cell, NSString *col, OCRowData *d) {
 	} else if ([col isEqualToString:@"result"]) {
 		cell.textField.stringValue = d.result;
 		cell.textField.textColor = toneColor(d.resultTone);
-		cell.toolTip = d.result.length > 20 ? d.result : nil;
+		// 结果省略中间（留下文件名开头和大小），失败原因省略末尾（从头读得懂）
+		BOOL problem = d.resultTone == UI_TONE_DANGER || d.resultTone == UI_TONE_WARN;
+		cell.textField.lineBreakMode = problem ? NSLineBreakByTruncatingTail : NSLineBreakByTruncatingMiddle;
+		cell.toolTip = d.result.length > 12 ? d.result : nil;
 	} else if ([col isEqualToString:@"state"]) {
 		OCStateCell *s = (OCStateCell *)cell;
 		BOOL run = d.running != 0;
@@ -511,7 +514,6 @@ static void configureCell(NSTableCellView *cell, NSString *col, OCRowData *d) {
 			} else {
 				[tf.leadingAnchor constraintEqualToAnchor:cell.leadingAnchor constant:2].active = YES;
 			}
-			if ([col isEqualToString:@"result"]) tf.lineBreakMode = NSLineBreakByTruncatingMiddle; // 保留开头和扩展名
 			if ([col isEqualToString:@"size"]) {
 				tf.alignment = NSTextAlignmentRight;
 				tf.font = [NSFont monospacedDigitSystemFontOfSize:13 weight:NSFontWeightRegular];
@@ -795,9 +797,9 @@ static void fitColumns(CGFloat width) {
 	NSArray<NSTableColumn *> *c = listTable.tableColumns;
 	if (c.count < 4) return;
 	width = MIN(width, listScroll.contentSize.width); // 去掉竖直滚动条占的宽度
-	CGFloat size = 62, state = 100;
+	CGFloat size = 62, state = 92;
 	CGFloat avail = width - listTable.intercellSpacing.width * c.count - size - state;
-	CGFloat result = MIN(MAX(floor(avail * 0.36), 90), 260);
+	CGFloat result = MIN(MAX(floor(avail * 0.38), 100), 280);
 	c[1].width = size;
 	c[2].width = state;
 	c[3].width = result;
