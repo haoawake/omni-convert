@@ -1,5 +1,15 @@
 # 更新记录
 
+## v1.1.0
+
+- **新增 macOS 版**（Apple 芯片，macOS 13 或更新）：下载 `OmniConvert-mac-arm64.zip`，解压后把「万能格式转换」拖进「应用程序」。
+  - 原生的 Mac 界面（支持深色模式），和 Windows 版一样分图片、视频、音频、文档、PDF 五页；拖进文件、`⌘V` 粘贴拷贝的文件、在访达里「打开方式 → 万能格式转换」、拖到程序坞图标上都行。
+  - FFmpeg、ImageMagick、PDFium 都装在程序里，不用另外安装；HEIC、RAW、AVIF、JPEG XL 等图片格式和 Windows 版一样能用。
+  - 视频可以用苹果芯片的硬件编码（H.264 / H.265）加速。
+  - Word、Excel、PPT 相关的转换需要安装免费的 LibreOffice（Mac 上的 Microsoft Office 不能在后台自动转换）；网页、Markdown 转 PDF 用电脑上的 Edge 或 Chrome。
+  - Mac 版暂时不能转成 AMR（没有可以分发的 AMR 编码器）。
+- PPT 转视频：没有 Microsoft PowerPoint 时（Mac，或者 Windows 上只装了 WPS、LibreOffice）也能转了，每一页做成一个画面，按「每页停留」的秒数自动翻页。
+
 ## v1.0.0
 
 第一个版本。

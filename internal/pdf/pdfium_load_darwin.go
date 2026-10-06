@@ -9,6 +9,9 @@ import (
 // symbol 是用 dlsym 找到的一个导出函数
 type symbol uintptr
 
+// proc 是导出函数。必须是具体类型（不能是接口）：Call 上的 uintptrescapes 只有直接调用时才生效
+type proc = symbol
+
 // Call 调用这个函数。uintptrescapes：参数里由指针转成的 uintptr 指向的对象会留在堆上，
 // 调用期间 Go 的栈扩容搬家也不会让 C 那边写到旧地址（比如 FPDF_GetPageSizeByIndex 的 &w、&h）
 //

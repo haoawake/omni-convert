@@ -50,11 +50,6 @@ type pdfiumProcs struct {
 	getSecurityHandlerRevision proc
 }
 
-// proc 是动态库里的一个导出函数：Call 的参数和返回值都按整数（指针）传
-type proc interface {
-	Call(a ...uintptr) (r1, r2 uintptr, lastErr error)
-}
-
 // pdfium 的错误码（FPDF_GetLastError 的值）
 const (
 	errUnknown  = 1

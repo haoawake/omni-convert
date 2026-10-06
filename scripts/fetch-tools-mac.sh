@@ -154,6 +154,7 @@ fetch "$PDFIUM_URL" "$tmp/pdfium.tgz"
 mkdir -p "$tmp/pdfium"
 tar -xzf "$tmp/pdfium.tgz" -C "$tmp/pdfium"
 cp "$tmp"/pdfium/lib/libpdfium.dylib "$tmp"/pdfium/LICENSE "$tmp"/pdfium/VERSION tools/pdfium/
+install_name_tool -id @rpath/libpdfium.dylib tools/pdfium/libpdfium.dylib 2> /dev/null
 codesign --force --sign - tools/pdfium/libpdfium.dylib 2> /dev/null
 
 du -sh tools/*

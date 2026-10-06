@@ -8,6 +8,10 @@ import (
 	"github.com/haoawake/omni-convert/internal/conv"
 )
 
+// proc 是 dll 里的一个导出函数。必须是具体类型（不能是接口）：Call 上的 uintptrescapes
+// 只有直接调用时才生效，它保证传进去的 &w 这类指针在调用期间一直有效
+type proc = *windows.LazyProc
+
 // loadProcs 加载 pdfium.dll，找到要用的每一个导出函数
 func loadProcs(path string, procs map[string]*proc) error {
 	dll := windows.NewLazyDLL(path)

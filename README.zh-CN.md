@@ -13,7 +13,7 @@
 | 系统 | 下载哪个 |
 |---|---|
 | Windows 10 / 11 | `OmniConvert-win-x64.zip` |
-| macOS 12 或更新，Apple 芯片（M1、M2、M3、M4…） | `OmniConvert-mac-arm64.zip` |
+| macOS 13 Ventura 或更新，Apple 芯片（M1、M2、M3、M4…） | `OmniConvert-mac-arm64.zip` |
 
 都在 [Releases 页面](https://github.com/haoawake/omni-convert/releases/latest)。Intel 芯片的 Mac 暂时没有安装包。
 
@@ -23,7 +23,7 @@
 |---|---|---|
 | **图片** | JPG、PNG、WEBP、AVIF、JXL、BMP、GIF、TIFF、ICO、TGA、PDF | 读得懂 iPhone 的 HEIC、单反 RAW（CR2/CR3/NEF/ARW/DNG…）、PSD、SVG 等几十种格式；改尺寸、**裁成固定像素**（裁剪填满 / 等比缩放 / 留白 / 拉伸）、**压到指定大小**（比如 200 KB 以内）、去掉照片里的拍摄地点等信息、多张图片合成一个 PDF |
 | **视频** | MP4、MKV、MOV、AVI、WEBM、FLV、WMV、M4V、TS、MPG、3GP、GIF 动图、WEBP 动图 | H.264 / H.265 / AV1 编码，**压到指定大小**（比如 25 MB 以内发邮件），改分辨率（含竖屏、方形、自定义），截取片段，改帧率，去掉声音，显卡加速（Windows：NVIDIA / AMD / Intel；Mac：苹果芯片的硬件编码） |
-| **音频** | MP3、M4A、AAC、WAV、FLAC、OGG、OPUS、WMA、AIFF、AC3、AMR、苹果铃声 M4R | **直接从视频里提取声音**，改音质、采样率、声道，压到指定大小，截取片段，音量标准化 |
+| **音频** | MP3、M4A、AAC、WAV、FLAC、OGG、OPUS、WMA、AIFF、AC3、AMR（Mac 版没有）、苹果铃声 M4R | **直接从视频里提取声音**，改音质、采样率、声道，压到指定大小，截取片段，音量标准化 |
 | **文档** | PDF、DOCX、DOC、RTF、ODT、TXT、HTML、XLSX、XLS、CSV、ODS、PPTX、PPT、ODP、图片、长图、视频 | Word / Excel / PPT / TXT / Markdown / 网页互转，**PPT 转视频**，任何文档转成一页页图片或一张长图 |
 | **PDF** | Word、Excel、PPT、JPG、PNG、长图、TXT | **合并、拆分**（每页一个 / 每几页一个 / 按页码范围提取）、**压缩**（无损 / 推荐 / 强力）、加密、解密、旋转 |
 

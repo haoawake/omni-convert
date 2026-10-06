@@ -66,6 +66,7 @@ jobs:
       - name: unzip like a user
         id: unzip
         if: always() && steps.build.outcome == 'success'
+        continue-on-error: true
         run: |
           rm -rf "$RUNNER_TEMP/user" && mkdir -p "$RUNNER_TEMP/user"
           ditto -x -k dist/OmniConvert-mac-arm64.zip "$RUNNER_TEMP/user"
@@ -80,12 +81,12 @@ jobs:
 
       - name: install LibreOffice
         id: lo
-        if: always() && steps.unzip.outcome == 'success'
+        if: always() && steps.build.outcome == 'success'
         continue-on-error: true
         run: brew install --cask libreoffice > out/libreoffice.log 2>&1
 
       - name: hide Homebrew
-        if: always() && steps.unzip.outcome == 'success'
+        if: always() && steps.build.outcome == 'success'
         run: |
           sudo mv /opt/homebrew /opt/homebrew-hidden || true
           [ -d /usr/local/Cellar ] && sudo mv /usr/local/Cellar /usr/local/Cellar-hidden || true
@@ -94,7 +95,7 @@ jobs:
 
       - name: smoke test (packaged app, CLI)
         id: smoke
-        if: always() && steps.unzip.outcome == 'success'
+        if: always() && steps.build.outcome == 'success'
         continue-on-error: true
         run: |
           app="$RUNNER_TEMP/user/万能格式转换.app"
@@ -104,7 +105,7 @@ jobs:
 
       - name: screenshots
         id: shots
-        if: always() && steps.unzip.outcome == 'success'
+        if: always() && steps.build.outcome == 'success'
         continue-on-error: true
         run: bash .github/ci/mac-shots.sh "$RUNNER_TEMP/user/万能格式转换.app" "$RUNNER_TEMP/smoke" out/shots 2>&1 | tee out/shots.log
 
