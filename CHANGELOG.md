@@ -9,6 +9,7 @@
   - Word、Excel、PPT 相关的转换需要安装免费的 LibreOffice（Mac 上的 Microsoft Office 不能在后台自动转换）；网页、Markdown 转 PDF 用电脑上的 Edge 或 Chrome。
   - Mac 版暂时不能转成 AMR（没有可以分发的 AMR 编码器）。
 - PPT 转视频：没有 Microsoft PowerPoint 时（Mac，或者 Windows 上只装了 WPS、LibreOffice）也能转了，每一页做成一个画面，按「每页停留」的秒数自动翻页。
+- 修正：命令行用 `-o` 指定相对路径的文件夹时，视频转换会失败。
 
 ## v1.0.0
 

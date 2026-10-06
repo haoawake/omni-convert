@@ -511,6 +511,7 @@ static void configureCell(NSTableCellView *cell, NSString *col, OCRowData *d) {
 			} else {
 				[tf.leadingAnchor constraintEqualToAnchor:cell.leadingAnchor constant:2].active = YES;
 			}
+			if ([col isEqualToString:@"result"]) tf.lineBreakMode = NSLineBreakByTruncatingMiddle; // 保留开头和扩展名
 			if ([col isEqualToString:@"size"]) {
 				tf.alignment = NSTextAlignmentRight;
 				tf.font = [NSFont monospacedDigitSystemFontOfSize:13 weight:NSFontWeightRegular];
@@ -762,7 +763,7 @@ static NSBox *newBox(NSColor *fill, NSColor *border, CGFloat radius) {
 static void buildList(void) {
 	listScroll = [NSScrollView new];
 	listScroll.hasVerticalScroller = YES;
-	listScroll.hasHorizontalScroller = YES; // 窗口很窄时可以左右拖着看「结果」
+	listScroll.hasHorizontalScroller = NO; // 各栏总是正好铺满，不用左右拖
 	listScroll.autohidesScrollers = YES;
 	listScroll.borderType = NSNoBorder;
 	listScroll.drawsBackground = NO;
@@ -772,7 +773,7 @@ static void buildList(void) {
 	listTable.allowsMultipleSelection = YES;
 	listTable.rowHeight = 26;
 	listTable.intercellSpacing = NSMakeSize(8, 0);
-	listTable.columnAutoresizingStyle = NSTableViewLastColumnOnlyAutoresizingStyle;
+	listTable.columnAutoresizingStyle = NSTableViewFirstColumnOnlyAutoresizingStyle; // 宽度有变化（比如出现竖直滚动条）时只改文件名一栏
 	NSArray *cols = @[ @[ @"name", @"文件", @220 ], @[ @"size", @"大小", @72 ], @[ @"state", @"状态", @120 ], @[ @"result", @"结果", @240 ] ];
 	for (NSArray *c in cols) {
 		NSTableColumn *tc = [[NSTableColumn alloc] initWithIdentifier:c[0]];
@@ -789,18 +790,18 @@ static void buildList(void) {
 	listScroll.documentView = listTable;
 }
 
-// fitColumns 按列表宽度分配四栏（和 Windows 版一样：大小、状态固定，剩下的文件名和结果对半分）
+// fitColumns 按列表宽度分配四栏：大小、状态固定，结果占三分之一左右，剩下的都给文件名，加起来正好是列表的宽度
 static void fitColumns(CGFloat width) {
 	NSArray<NSTableColumn *> *c = listTable.tableColumns;
 	if (c.count < 4) return;
 	width = MIN(width, listScroll.contentSize.width); // 去掉竖直滚动条占的宽度
-	CGFloat size = 66, state = 116;
-	CGFloat rest = MAX(width - size - state - 8 * 4 - 4, 200);
-	CGFloat name = rest * 0.44;
-	c[0].width = name;
+	CGFloat size = 62, state = 100;
+	CGFloat avail = width - listTable.intercellSpacing.width * c.count - size - state;
+	CGFloat result = MIN(MAX(floor(avail * 0.36), 90), 260);
 	c[1].width = size;
 	c[2].width = state;
-	c[3].width = rest - name;
+	c[3].width = result;
+	c[0].width = MAX(avail - result, c[0].minWidth);
 }
 
 int ui_new(int kind, int parent) {
