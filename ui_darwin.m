@@ -793,8 +793,9 @@ static void buildList(void) {
 static void fitColumns(CGFloat width) {
 	NSArray<NSTableColumn *> *c = listTable.tableColumns;
 	if (c.count < 4) return;
+	width = MIN(width, listScroll.contentSize.width); // 去掉竖直滚动条占的宽度
 	CGFloat size = 66, state = 116;
-	CGFloat rest = MAX(width - size - state - 8 * 4 - 18, 200);
+	CGFloat rest = MAX(width - size - state - 8 * 4 - 4, 200);
 	CGFloat name = rest * 0.44;
 	c[0].width = name;
 	c[1].width = size;
