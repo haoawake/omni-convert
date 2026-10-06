@@ -1,0 +1,177 @@
+# 临时的开发用流程（mac-port 分支）：在 macOS 上下载引擎、跑测试、打包 .app、用打包好的程序做功能测试、截图；
+# Windows 上跑测试和打包。所有日志和截图推到 ci-results 分支。合并前删掉。
+name: mac-dev
+
+on:
+  push:
+    branches: [mac-port]
+
+permissions:
+  contents: write
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  mac:
+    runs-on: macos-15
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+      - name: prepare
+        run: mkdir -p out && { sw_vers; uname -m; go version; xcodebuild -version; } > out/env.txt 2>&1
+
+      - name: fetch tools
+        id: fetch
+        run: bash scripts/fetch-tools-mac.sh 2>&1 | tee out/fetch.log
+      - name: probe tools
+        id: probe
+        if: always() && steps.fetch.outcome == 'success'
+        continue-on-error: true
+        run: |
+          cp tools/magick/imagemagick-osx-arm64.lock out/ 2>/dev/null || true
+          bash .github/ci/mac-probe.sh > out/probe.log 2>&1
+
+      - name: go vet
+        id: vet
+        if: always() && steps.fetch.outcome == 'success'
+        continue-on-error: true
+        run: go vet ./... 2>&1 | tee out/vet.log
+      - name: go test
+        id: test
+        if: always() && steps.fetch.outcome == 'success'
+        continue-on-error: true
+        run: go test -short -count=1 ./... 2>&1 | tee out/test.log
+
+      - name: build app
+        id: build
+        if: always() && steps.fetch.outcome == 'success'
+        run: |
+          bash scripts/build-mac.sh 1.1.0 2>&1 | tee out/build.log
+          cp dist/minos.txt dist/SHA256SUMS-mac.txt out/
+          ls -l dist >> out/build.log
+          { codesign -dvvv "dist/万能格式转换.app" 2>&1; plutil -p "dist/万能格式转换.app/Contents/Info.plist"; find "dist/万能格式转换.app" -type f | head -300; du -sh "dist/万能格式转换.app"/Contents/*; } > out/bundle.txt 2>&1
+
+      - name: unzip like a user
+        id: unzip
+        if: always() && steps.build.outcome == 'success'
+        run: |
+          rm -rf "$RUNNER_TEMP/user" && mkdir -p "$RUNNER_TEMP/user"
+          ditto -x -k dist/OmniConvert-mac-arm64.zip "$RUNNER_TEMP/user"
+          ls -la "$RUNNER_TEMP/user" | tee out/unzip.log
+          codesign --verify --deep --strict --verbose=2 "$RUNNER_TEMP/user/万能格式转换.app" 2>&1 | tee -a out/unzip.log
+          spctl -a -vvv -t exec "$RUNNER_TEMP/user/万能格式转换.app" >> out/unzip.log 2>&1 || true
+          # 搬走后不能有任何引用指向 Homebrew 或者下载用的临时环境
+          for f in $(find "$RUNNER_TEMP/user/万能格式转换.app/Contents" -type f -perm +111) "$RUNNER_TEMP"/user/万能格式转换.app/Contents/Frameworks/*.dylib; do
+            otool -L "$f" 2>/dev/null | tail -n +2 | awk '{print $1}' | grep -vE '^(@rpath|@executable_path|@loader_path|/usr/lib|/System)' | sed "s|^|BAD $(basename "$f"): |"
+          done | tee out/badrefs.log
+          [ ! -s out/badrefs.log ]
+
+      - name: install LibreOffice
+        id: lo
+        if: always() && steps.unzip.outcome == 'success'
+        continue-on-error: true
+        run: brew install --cask libreoffice > out/libreoffice.log 2>&1
+
+      - name: hide Homebrew
+        if: always() && steps.unzip.outcome == 'success'
+        run: |
+          sudo mv /opt/homebrew /opt/homebrew-hidden || true
+          [ -d /usr/local/Cellar ] && sudo mv /usr/local/Cellar /usr/local/Cellar-hidden || true
+          rm -rf tools
+          echo "homebrew hidden" > out/hidden.txt
+
+      - name: smoke test (packaged app, CLI)
+        id: smoke
+        if: always() && steps.unzip.outcome == 'success'
+        continue-on-error: true
+        run: |
+          app="$RUNNER_TEMP/user/万能格式转换.app"
+          DYLD_PRINT_LIBRARIES=1 MAGICK_CONFIGURE_PATH="$app/Contents/Resources/magick" "$app/Contents/MacOS/magick" -version > out/dyld-magick.log 2>&1 || true
+          "$app/Contents/MacOS/万能格式转换" -version > out/version.txt 2>&1 || true
+          bash scripts/mac/smoke.sh "$app" "$RUNNER_TEMP/smoke" 2>&1 | tee out/smoke.log
+
+      - name: screenshots
+        id: shots
+        if: always() && steps.unzip.outcome == 'success'
+        continue-on-error: true
+        run: bash .github/ci/mac-shots.sh "$RUNNER_TEMP/user/万能格式转换.app" "$RUNNER_TEMP/smoke" out/shots 2>&1 | tee out/shots.log
+
+      - name: summary
+        if: always()
+        run: |
+          {
+            echo "fetch=${{ steps.fetch.outcome }}"
+            echo "probe=${{ steps.probe.outcome }}"
+            echo "vet=${{ steps.vet.outcome }}"
+            echo "test=${{ steps.test.outcome }}"
+            echo "build=${{ steps.build.outcome }}"
+            echo "unzip=${{ steps.unzip.outcome }}"
+            echo "libreoffice=${{ steps.lo.outcome }}"
+            echo "smoke=${{ steps.smoke.outcome }}"
+            echo "shots=${{ steps.shots.outcome }}"
+          } > out/STEPS-mac.txt
+          cp dist/OmniConvert-mac-arm64.zip /dev/null 2>/dev/null; ls -l dist >> out/STEPS-mac.txt 2>&1 || true
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: mac
+          path: out
+
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+      - run: mkdir -p out
+      - name: fetch tools
+        id: fetch
+        run: bash scripts/fetch-tools.sh 2>&1 | tee out/fetch.log
+      - name: go vet
+        id: vet
+        continue-on-error: true
+        run: go vet ./... 2>&1 | tee out/vet.log
+      - name: go test
+        id: test
+        continue-on-error: true
+        run: go test -short -count=1 ./... 2>&1 | tee out/test.log
+      - name: build
+        id: build
+        continue-on-error: true
+        run: bash scripts/build.sh 1.1.0 2>&1 | tee out/build.log
+      - name: summary
+        if: always()
+        run: |
+          {
+            echo "fetch=${{ steps.fetch.outcome }}"
+            echo "vet=${{ steps.vet.outcome }}"
+            echo "test=${{ steps.test.outcome }}"
+            echo "build=${{ steps.build.outcome }}"
+          } > out/STEPS-windows.txt
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: windows
+          path: out
+
+  report:
+    needs: [mac, windows]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          path: out
+      - run: |
+          cd out
+          printf 'sha=%s\nmac=%s\nwindows=%s\n' "${{ github.sha }}" "${{ needs.mac.result }}" "${{ needs.windows.result }}" > STATUS
+          git init -q -b ci-results && git config user.name ci && git config user.email ci@users.noreply.github.com
+          git add -A && git commit -qm "ci ${{ github.sha }} mac=${{ needs.mac.result }} windows=${{ needs.windows.result }}"
+          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" HEAD:ci-results

@@ -3,6 +3,7 @@ module github.com/haoawake/omni-convert
 go 1.26.0
 
 require (
+	github.com/ebitengine/purego v0.11.1
 	github.com/go-ole/go-ole v1.3.0
 	github.com/pdfcpu/pdfcpu v0.16.0
 	github.com/xuri/excelize/v2 v2.11.0

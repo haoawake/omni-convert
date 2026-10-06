@@ -1,6 +1,7 @@
 package catalog
 
 import (
+	"runtime"
 	"strconv"
 
 	"github.com/haoawake/omni-convert/internal/conv"
@@ -219,10 +220,17 @@ func videoRows(codecs []Choice) []Row {
 		trimRow(),
 		Row{Label: "声音", Fields: []Field{{Key: conv.OptMute, Type: Check, Label: "去掉声音"}}},
 		Row{Label: "加速", ShowIf: func(conv.Options) bool { return GPUAvailable() }, Fields: []Field{
-			{Key: conv.OptGPU, Type: Check, Label: "用显卡加速（快很多，同样画质下文件稍大）"},
+			{Key: conv.OptGPU, Type: Check, Label: gpuLabel()},
 		}},
 	)
 	return rows
+}
+
+func gpuLabel() string {
+	if runtime.GOOS == "darwin" {
+		return "用硬件编码加速（快很多，同样画质下文件稍大）"
+	}
+	return "用显卡加速（快很多，同样画质下文件稍大）"
 }
 
 func animRows(defFPS string) []Row {

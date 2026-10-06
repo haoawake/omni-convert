@@ -1,8 +1,9 @@
 // Package office 负责文档类的转换：Word、Excel、PowerPoint、纯文本、Markdown、网页、CSV，
 // 以及 PDF 转 Word / Excel。
 //
-// 能用 Microsoft Office 就用 Office（COM 自动化，效果最好），其次 WPS，再次 LibreOffice。
-// CSV ↔ Excel、Markdown → 网页这些不需要 Office，用纯 Go 完成；网页、Markdown 转 PDF 优先用 Edge。
+// Windows 上能用 Microsoft Office 就用 Office（COM 自动化，效果最好），其次 WPS，再次 LibreOffice；
+// macOS 上用 LibreOffice（Office for Mac 不能在后台自动转换）。
+// CSV ↔ Excel、Markdown → 网页这些不需要 Office，用纯 Go 完成；网页、Markdown 转 PDF 优先用 Edge（macOS 上也可以是 Chrome）。
 package office
 
 import (
@@ -18,26 +19,37 @@ import (
 // Info 说明这台电脑上能用什么程序转换
 type Info struct {
 	Word, Excel, PowerPoint string // "Microsoft Office" | "WPS" | "LibreOffice" | ""
-	LibreOffice, Edge       string // 程序路径，没有时为空
+	LibreOffice, Edge       string // 程序路径，没有时为空（Edge 在 macOS 上也可以是 Chrome，用来把网页打印成 PDF）
 }
 
 var (
-	detectOnce    sync.Once
+	detectMu      sync.Mutex
+	detectDone    bool
 	detected      Info
 	detectedProgs [numApps]progInfo
 )
 
-// Detect 查一下装了哪些软件（只看注册表，不启动程序；结果会缓存）
+// Detect 查一下装了哪些软件（只看注册表或者固定的安装位置，不启动程序；结果会缓存）
 func Detect() Info {
-	detectOnce.Do(func() {
+	detectMu.Lock()
+	defer detectMu.Unlock()
+	if !detectDone {
+		detectDone = true
 		detected, detectedProgs = detectSystem()
 		for _, p := range []*string{&detected.Word, &detected.Excel, &detected.PowerPoint} {
 			if *p == "" && detected.LibreOffice != "" {
 				*p = vendorLO
 			}
 		}
-	})
+	}
 	return detected
+}
+
+// Refresh 让下一次 Detect 重新查找（用户刚装好 LibreOffice 回到程序时，不用重启就能用）
+func Refresh() {
+	detectMu.Lock()
+	detectDone = false
+	detectMu.Unlock()
 }
 
 func comProg(k appKind) progInfo {

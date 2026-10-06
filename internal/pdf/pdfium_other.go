@@ -1,4 +1,4 @@
-//go:build !windows
+//go:build !windows && !darwin
 
 package pdf
 
@@ -10,7 +10,7 @@ import (
 	"github.com/haoawake/omni-convert/internal/conv"
 )
 
-var errNoPdfium = conv.Fail("这个功能只支持 Windows", "")
+var errNoPdfium = conv.Fail("这个功能只支持 Windows 和 macOS", "")
 
 func pdfiumAvailable() error { return errNoPdfium }
 

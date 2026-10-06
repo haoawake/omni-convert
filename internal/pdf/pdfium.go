@@ -1,10 +1,11 @@
-//go:build windows
+//go:build windows || darwin
 
 package pdf
 
-// pdfium.dll 的绑定：不用 cgo，直接用 syscall 调导出函数。
+// pdfium 的绑定：不用 cgo，直接调动态库的导出函数（Windows 上是 pdfium.dll，用 syscall；
+// macOS 上是 libpdfium.dylib，用 purego）。怎么加载见 pdfium_load_*.go。
 // pdfium 不是线程安全的，所有调用都要先拿 pdfiumMu。
-// syscall 读不了 float/double 返回值，所以只用返回整数、指针的函数，尺寸用输出参数取。
+// 这种调用方式读不了 float/double 返回值，所以只用返回整数、指针的函数，尺寸用输出参数取。
 
 import (
 	"image"
@@ -12,11 +13,8 @@ import (
 	"os"
 	"runtime"
 	"sync"
-	"syscall"
 	"unicode/utf16"
 	"unsafe"
-
-	"golang.org/x/sys/windows"
 
 	"github.com/haoawake/omni-convert/internal/conv"
 	"github.com/haoawake/omni-convert/internal/tools"
@@ -49,10 +47,15 @@ type pdfiumProcs struct {
 	createNewDocument,
 	importPagesByIndex,
 	saveAsCopy,
-	getSecurityHandlerRevision *windows.LazyProc
+	getSecurityHandlerRevision proc
 }
 
-// pdfium 的错误码（FPDF_GetLastError 的值；在 Windows 上它其实就是 GetLastError，所以直接取 syscall 返回的错误码）
+// proc 是动态库里的一个导出函数：Call 的参数和返回值都按整数（指针）传
+type proc interface {
+	Call(a ...uintptr) (r1, r2 uintptr, lastErr error)
+}
+
+// pdfium 的错误码（FPDF_GetLastError 的值）
 const (
 	errUnknown  = 1
 	errFile     = 2
@@ -82,12 +85,7 @@ func loadPdfium() {
 		pdfiumErr = err
 		return
 	}
-	dll := windows.NewLazyDLL(path)
-	if err := dll.Load(); err != nil {
-		pdfiumErr = conv.Fail("PDF 组件 pdfium 加载失败", err.Error())
-		return
-	}
-	procs := map[string]**windows.LazyProc{
+	procs := map[string]*proc{
 		"FPDF_InitLibrary":                &fp.initLibrary,
 		"FPDF_LoadDocument":               &fp.loadDocument,
 		"FPDF_LoadMemDocument64":          &fp.loadMemDocument64,
@@ -109,12 +107,8 @@ func loadPdfium() {
 		"FPDF_SaveAsCopy":                 &fp.saveAsCopy,
 		"FPDF_GetSecurityHandlerRevision": &fp.getSecurityHandlerRevision,
 	}
-	for name, p := range procs {
-		*p = dll.NewProc(name)
-		if err := (*p).Find(); err != nil {
-			pdfiumErr = conv.Fail("PDF 组件 pdfium 版本不对", name)
-			return
-		}
+	if pdfiumErr = loadProcs(path, procs); pdfiumErr != nil {
+		return
 	}
 	pdfiumMu.Lock()
 	fp.initLibrary.Call()
@@ -164,14 +158,6 @@ func Open(path, password string) (*Doc, error) {
 		}
 	}
 	return d, err
-}
-
-// lastErrno 取出 syscall 返回的 Windows 错误码（pdfium 在 Windows 上用 SetLastError 记录错误）
-func lastErrno(e error) int {
-	if en, ok := e.(syscall.Errno); ok {
-		return int(en)
-	}
-	return errUnknown
 }
 
 func openOnce(path, password string) (*Doc, error) {
@@ -410,7 +396,7 @@ var (
 )
 
 func writeBlock(_ uintptr, data uintptr, size uintptr) uintptr {
-	n := int(uint32(size)) // C 的 unsigned long 在 Windows 上是 32 位
+	n := blockSize(size)
 	if curWriter == nil || curWriteErr != nil {
 		return 0
 	}
@@ -427,7 +413,7 @@ func writeBlock(_ uintptr, data uintptr, size uintptr) uintptr {
 
 // saveDoc 把文档 h 写到 out。调用前必须已经拿着 pdfiumMu。
 func saveDoc(h uintptr, out string, flags uintptr) error {
-	writeCbOnce.Do(func() { writeCb = windows.NewCallback(writeBlock) })
+	writeCbOnce.Do(func() { writeCb = newCallback(writeBlock) })
 	f, err := os.Create(out)
 	if err != nil {
 		return conv.Fail("没法写入输出文件", err.Error())

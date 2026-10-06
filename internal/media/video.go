@@ -60,6 +60,8 @@ var (
 		"mpeg4": {2, 4, 7}, "wmv2": {2, 4, 7}, "mpeg2": {2, 4, 7}, // 这三个是 -q:v
 	}
 	gpuCQ = map[string][3]int{"h264": {20, 25, 30}, "h265": {22, 27, 32}, "av1": {28, 34, 40}}
+	// VideoToolbox 的质量是 1~100，越大越清晰
+	vtQuality = map[string][3]int{"h264": {70, 60, 50}, "h265": {66, 56, 46}}
 	// 每像素每帧至少要这么多比特才不会糊成一片；按大小压缩时低于这个值就自动降低分辨率
 	minBPP = map[string]float64{"h264": 0.035, "h265": 0.025, "av1": 0.022, "vp9": 0.025, "mpeg4": 0.07, "wmv2": 0.08, "mpeg2": 0.08}
 )
@@ -619,7 +621,7 @@ func cpuVideoArgs(codec string, qi int, bitrate float64, mov bool) []string {
 	return a
 }
 
-// gpuVideoArgs 是显卡编码参数（NVIDIA NVENC、AMD AMF、Intel QSV）
+// gpuVideoArgs 是显卡编码参数（NVIDIA NVENC、AMD AMF、Intel QSV、苹果 VideoToolbox）
 func gpuVideoArgs(enc, codec string, qi int, bitrate float64, mov bool) []string {
 	a := []string{"-c:v", enc, "-pix_fmt", "nv12"}
 	q := strconv.Itoa(gpuCQ[codec][qi])
@@ -649,6 +651,12 @@ func gpuVideoArgs(enc, codec string, qi int, bitrate float64, mov bool) []string
 			a = append(a, capped()...)
 		} else {
 			a = append(a, "-global_quality", q)
+		}
+	case strings.HasSuffix(enc, "_videotoolbox"):
+		if bitrate > 0 {
+			a = append(a, capped()...)
+		} else {
+			a = append(a, "-q:v", strconv.Itoa(vtQuality[codec][qi]))
 		}
 	}
 	if codec == "h265" && mov {

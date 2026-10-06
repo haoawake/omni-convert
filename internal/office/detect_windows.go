@@ -11,6 +11,8 @@ import (
 	"unicode/utf16"
 
 	"golang.org/x/sys/windows/registry"
+
+	"github.com/haoawake/omni-convert/internal/conv"
 )
 
 // 通过注册表找 Office / WPS / LibreOffice / Edge，不启动任何程序。
@@ -347,4 +349,8 @@ func keyMentions(path string, marker []byte) bool {
 		}
 	}
 	return false
+}
+
+func errNoOffice() error {
+	return conv.Fail("需要安装 Microsoft Office、WPS 或 LibreOffice 才能转换这类文件", "LibreOffice 是免费的：https://zh-cn.libreoffice.org")
 }
