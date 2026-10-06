@@ -74,7 +74,7 @@ jobs:
           spctl -a -vvv -t exec "$RUNNER_TEMP/user/万能格式转换.app" >> out/unzip.log 2>&1 || true
           # 搬走后不能有任何引用指向 Homebrew 或者下载用的临时环境
           for f in $(find "$RUNNER_TEMP/user/万能格式转换.app/Contents" -type f -perm +111) "$RUNNER_TEMP"/user/万能格式转换.app/Contents/Frameworks/*.dylib; do
-            otool -L "$f" 2>/dev/null | tail -n +2 | awk '{print $1}' | grep -vE '^(@rpath|@executable_path|@loader_path|/usr/lib|/System)' | sed "s|^|BAD $(basename "$f"): |"
+            otool -L "$f" 2>/dev/null | tail -n +2 | awk '{print $1}' | grep -vE '^(@rpath|@executable_path|@loader_path|/usr/lib|/System)' | sed "s|^|BAD $(basename "$f"): |" || true
           done | tee out/badrefs.log
           [ ! -s out/badrefs.log ]
 

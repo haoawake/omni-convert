@@ -238,3 +238,6 @@ func (t *task) convert(in, out, to string) error {
 	}
 	return conv.Fail("不支持这种文件", "")
 }
+
+// CanExportVideo 判断能不能用 Microsoft PowerPoint 把演示文稿导出成视频（保留动画和切换效果）
+func CanExportVideo() bool { return hasCOM(appPPT) && comProg(appPPT).vendor == vendorMS }

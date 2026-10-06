@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -600,6 +601,9 @@ func TestSniffAndExt(t *testing.T) {
 }
 
 func TestFileURL(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("用的是 Windows 的路径")
+	}
 	cases := map[string]string{
 		`C:\a b\中文.html`:       "file:///C:/a%20b/%E4%B8%AD%E6%96%87.html",
 		`\\server\share\x.htm`: "file://server/share/x.htm",
@@ -612,6 +616,9 @@ func TestFileURL(t *testing.T) {
 }
 
 func TestLibreOfficeArgs(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("用的是 Windows 的路径")
+	}
 	args := loArgs(`C:\Users\张三\AppData\Local\omni-convert\libreoffice`, `C:\tmp\src1.pdf`, `C:\tmp\lo2`, "docx", openOpts{pdf: true})
 	s := strings.Join(args, " ")
 	for _, want := range []string{"-env:UserInstallation=file:///C:/Users/%E5%BC%A0%E4%B8%89/", "--headless", "--infilter=writer_pdf_import", "--convert-to docx:MS Word 2007 XML", "--outdir C:\\tmp\\lo2 C:\\tmp\\src1.pdf"} {

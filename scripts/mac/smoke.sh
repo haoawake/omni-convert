@@ -92,7 +92,7 @@ echo "== 音频"
 check "WAV → MP3" 'conv -to aud:mp3 声音.wav && [ "$(acodec 声音.mp3)" = mp3 ]'
 check "视频里提取声音 → M4A" 'conv -to aud:m4a "视频 片段.mov" && [ "$(acodec "视频 片段.m4a")" = aac ]'
 check "WAV → FLAC / OGG / OPUS / AIFF / WMA / AC3 / 铃声" 'for f in flac ogg opus aiff wma ac3 m4r; do conv -to aud:$f 声音.wav || exit 1; done'
-check "WAV → AMR" 'conv -to aud:amr 声音.wav && [ -s 声音.amr ]'
+check "AMR 不在 Mac 版里（没有编码器）" '! conv -to aud:amr 声音.wav'
 
 echo "== PDF"
 check "合并" 'conv -to pdf:merge "文档 A.pdf" "截图 等2张图片.pdf" && [ -s "文档 A等2个文件_合并.pdf" ]'
@@ -117,6 +117,7 @@ if [ -x /Applications/LibreOffice.app/Contents/MacOS/soffice ]; then
 	check "XLSX → PDF（LibreOffice）" 'conv -to doc:pdf 表格.xlsx && head -c 5 表格.pdf | grep -q %PDF-'
 	check "PPTX → PDF（LibreOffice）" 'mkdir -p ppt && conv -to doc:pdf -o ppt "文档 A.pptx" && head -c 5 "ppt/文档 A.pdf" | grep -q %PDF-'
 	check "DOCX → 长图" 'conv -to doc:long 笔记.docx && [ "$(kind 笔记_长图.jpg)" = JPEG ]'
+	check "PPTX → MP4 视频（每页 1 秒）" 'mkdir -p pptv && conv -to doc:mp4 -o pptv -set slidesec=1 "文档 A.pptx" && [ "$(vcodec "pptv/文档 A.mp4")" = h264 ]'
 	check "XLSX → CSV" 'mkdir -p csv && conv -to doc:csv -o csv 表格.xlsx && grep -q 苹果 csv/表格.csv'
 	check "PDF → Word（LibreOffice）" 'conv -to pdf:docx "文档 A.pdf" && unzip -l "文档 A.docx" | grep -q word/document.xml'
 else

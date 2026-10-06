@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/haoawake/omni-convert/internal/conv"
 	"github.com/haoawake/omni-convert/internal/tools"
@@ -186,6 +187,9 @@ func convertAudio(ctx context.Context, j *conv.Job, format string) error {
 		slices.Contains(f.copyFrom, info.AudioCodec) && (f.maxCh == 0 || info.Channels <= f.maxCh)
 	p.cover = f.cover && info.CoverIndex >= 0 && (info.CoverCodec == "mjpeg" || info.CoverCodec == "png")
 
+	if !p.copy && !HasEncoder(ctx, f.codec) {
+		return conv.Fail("这个版本不能转成 "+strings.ToUpper(f.name), "缺少 "+f.codec+" 编码器")
+	}
 	tmp, err := j.TempDir()
 	if err != nil {
 		return err
@@ -345,4 +349,23 @@ func (p *aplan) encode(ctx context.Context, tmp string) error {
 		err = runFFmpeg(ctx, p.args(false, false), tmp, p.length, prog)
 	}
 	return friendly(err, "音频转换失败")
+}
+
+var (
+	encMu    sync.Mutex
+	encoders string // ffmpeg -encoders 的输出，第一次用到时读
+)
+
+// HasEncoder 看看 ffmpeg 有没有这个编码器（macOS 版的 FFmpeg 没有 AMR 编码器）
+func HasEncoder(ctx context.Context, name string) bool {
+	encMu.Lock()
+	defer encMu.Unlock()
+	if encoders == "" {
+		out, err := tools.Run(ctx, tools.FFmpeg(), []string{"-hide_banner", "-encoders"}, nil)
+		if err != nil {
+			return true // 读不出来就当作有，交给正式转换去报错
+		}
+		encoders = string(out)
+	}
+	return strings.Contains(encoders, " "+name+" ")
 }

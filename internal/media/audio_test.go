@@ -1,6 +1,7 @@
 package media
 
 import (
+	"context"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -32,6 +33,7 @@ func TestAudioAllTargets(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.format, func(t *testing.T) {
 			t.Parallel()
+			skipNoAMR(t, c.format)
 			r := runJob(t, Audio(c.format), in, nil)
 			out := r.one(t)
 			if filepath.Ext(out) != c.ext {
@@ -150,6 +152,7 @@ func TestAudioTargetSize(t *testing.T) {
 	}{{"mp3", 300 << 10}, {"m4a", 200 << 10}, {"opus", 100 << 10}, {"ogg", 400 << 10}, {"wma", 250 << 10}, {"amr", 40 << 10}} {
 		t.Run(c.format, func(t *testing.T) {
 			t.Parallel()
+			skipNoAMR(t, c.format)
 			out := runJob(t, Audio(c.format), in, conv.Options{conv.OptTargetSize: itoa(c.size)}).one(t)
 			sz := fileSize(out)
 			t.Logf("%s 目标 %s：%s", c.format, humanSize(c.size), humanSize(sz))
@@ -191,5 +194,12 @@ func TestAudioMultichannel(t *testing.T) {
 		if !info.HasAudio || info.Channels < 2 {
 			t.Errorf("%s：结果不对 %+v", f, info)
 		}
+	}
+}
+
+// skipNoAMR macOS 版的 FFmpeg 没有 AMR 编码器，那里不测转成 AMR
+func skipNoAMR(t *testing.T, format string) {
+	if format == "amr" && !HasEncoder(context.Background(), "libopencore_amrnb") {
+		t.Skip("FFmpeg 没有 AMR 编码器")
 	}
 }
