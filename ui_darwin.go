@@ -124,7 +124,7 @@ func runApp(initial []string) {
 	if shotFile != "" {
 		C.ui_dark(boolInt(os.Getenv("OMNI_SHOT_APPEARANCE") == "dark"))
 	}
-	withC(appName, func(s *C.char) { C.ui_window(s, 1180, 800, 1000, 660) })
+	withC(appName, func(s *C.char) { C.ui_window(s, 1260, 820, 1080, 700) })
 	withC("版本 "+version, func(s *C.char) { C.ui_set_version(s) })
 	a.ready = true
 	a.refreshSidebar()
@@ -229,7 +229,7 @@ func (a *macApp) label(key string, parent C.int, s string, font, tone C.int, x, 
 	setText(id, s)
 	C.ui_font(id, font)
 	C.ui_tone(id, tone)
-	_, h := measure(s, font, width-4) // 文字框左右各有 2 点的留白
+	_, h := measure(s, font, width-6) // 文字框左右各有一点留白
 	if !wrap {
 		_, h = measure("国", font, 0)
 	}
@@ -369,7 +369,7 @@ func (a *macApp) layout() {
 	barH := 64.0
 	bottom := H - barH - 14
 	avail := x1 - x0
-	optW := min(max(avail*0.44, 390), 540)
+	optW := min(max(avail*0.42, 400), 520)
 	a.layoutOptions(x0, y, optW, bottom-y)
 	a.layoutFiles(x0+optW+18, y, x1-(x0+optW+18), bottom-y)
 	a.layoutBar(x0, x1, H-barH, barH)
@@ -399,7 +399,7 @@ func (a *macApp) layoutOptions(x, y, w, h float64) {
 	}
 
 	rows := ps.target.Visible(ps.opts)
-	lx, lw := 14.0, 74.0
+	lx, lw := 14.0, 62.0
 	cx := lx + lw + 10
 	right := dw - 16
 	const rowH = 28.0
@@ -417,14 +417,19 @@ func (a *macApp) layoutOptions(x, y, w, h float64) {
 				id := a.w("rl"+itoa(ri), C.UI_LABEL, sc)
 				setText(id, row.Label)
 				C.ui_tone(id, C.UI_TONE_TEXT2)
-				setFrame(id, lx, yy+(rowH-lh)/2-1, lw, lh+2)
+				setFrame(id, lx-6, yy+(rowH-lh)/2-1, lw+6, lh+2)
 				C.ui_align(id, 2)
 			}
 			xx := cx
 			for fi, f := range row.Fields {
 				key := itoa(ri*100 + fi)
 				fw := a.fieldWidth(f, sc, key)
-				if xx+fw > right && xx > cx {
+				need := fw
+				if f.Unit != "" && f.Type != catalog.Seg {
+					uw, _ := measure(f.Unit, C.UI_FONT_BODY, 0)
+					need += uw + 8 // 单位和输入框放在同一行
+				}
+				if xx+need > right && xx > cx {
 					xx = cx
 					yy += rowH + 8
 				}
@@ -435,7 +440,7 @@ func (a *macApp) layoutOptions(x, y, w, h float64) {
 					id := a.w("u"+key, C.UI_LABEL, sc)
 					setText(id, f.Unit)
 					C.ui_tone(id, C.UI_TONE_TEXT2)
-					setFrame(id, xx-2, yy+(rowH-uh)/2-1, uw+4, uh+2)
+					setFrame(id, xx-2, yy+(rowH-uh)/2-1, uw+8, uh+2)
 					xx += uw + 8
 				}
 			}
@@ -455,7 +460,7 @@ func (a *macApp) fieldWidth(f catalog.Field, parent C.int, key string) float64 {
 	switch f.Type {
 	case catalog.Static:
 		w, _ := measure(f.Label, C.UI_FONT_BODY, 0)
-		return w + 4
+		return w + 6
 	case catalog.Check:
 		id := a.fieldView(f, parent, key)
 		w, _ := fit(id)
@@ -583,7 +588,7 @@ func (a *macApp) layoutFiles(x, y, w, h float64) {
 	}
 	title := "文件列表"
 	tw, _ := measure(title, C.UI_FONT_BOLD, 0)
-	a.label("ftitle", 0, title, C.UI_FONT_BOLD, C.UI_TONE_TEXT, x+16, y+12, tw+4, false)
+	a.label("ftitle", 0, title, C.UI_FONT_BOLD, C.UI_TONE_TEXT, x+16, y+12, tw+8, false)
 	right := x + w - 10
 	if n := len(ps.items); n > 0 {
 		sub := itoa(n) + " 个文件"
@@ -645,9 +650,9 @@ func (a *macApp) layoutBar(x0, x1, y, h float64) {
 
 	busy := a.pageBusy(a.page())
 	a.btnBusy = busy
-	label, symbol, kind := "开始转换", "play.fill", C.int(C.UI_PRIMARY)
+	label, symbol, kind := " 开始转换", "play.fill", C.int(C.UI_PRIMARY)
 	if busy {
-		label, symbol, kind = "停止", "stop.fill", C.UI_DANGER
+		label, symbol, kind = " 停止", "stop.fill", C.UI_DANGER
 	}
 	sid := a.w("start", kind, 0)
 	setText(sid, label)
@@ -659,7 +664,7 @@ func (a *macApp) layoutBar(x0, x1, y, h float64) {
 	a.actions[sid] = func(int) { a.startOrStop() }
 
 	_, lh := measure("保存到", C.UI_FONT_BODY, 0)
-	a.label("savelbl", 0, "保存到", C.UI_FONT_BODY, C.UI_TONE_TEXT2, x0, y+(h-lh)/2-1, 50, false)
+	a.label("savelbl", 0, "保存到", C.UI_FONT_BODY, C.UI_TONE_TEXT2, x0, y+(h-lh)/2-1, 54, false)
 	pid := a.w("outdir", C.UI_POPUP, 0)
 	items := []string{"和原文件放在同一个文件夹"}
 	sel := 0
@@ -712,6 +717,7 @@ func (a *macApp) layoutBar(x0, x1, y, h float64) {
 			actW += 22
 		}
 		tw, th := measure(a.toast, C.UI_FONT_BODY, 0)
+		tw += 8 // 文字框自己的留白
 		bwid := min(tw+28+actW, rightEdge-left)
 		tb := a.w("toast", C.UI_TOAST, 0)
 		C.ui_on(tb, boolInt(a.toastErr))
@@ -735,6 +741,7 @@ func (a *macApp) layoutBar(x0, x1, y, h float64) {
 	} else if a.sess != nil {
 		st := a.statusText()
 		tw, th := measure(st, C.UI_FONT_BODY, 0)
+		tw += 8
 		id := a.w("status", C.UI_LABEL, 0)
 		setText(id, st)
 		C.ui_tone(id, C.UI_TONE_TEXT2)

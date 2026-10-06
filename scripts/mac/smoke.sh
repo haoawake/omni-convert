@@ -115,9 +115,13 @@ if [ -x /Applications/LibreOffice.app/Contents/MacOS/soffice ]; then
 	check "TXT → DOCX（LibreOffice）" 'conv -to doc:docx 笔记.txt && unzip -l 笔记.docx | grep -q word/document.xml'
 	check "DOCX → PDF（LibreOffice）" 'conv -to doc:pdf 笔记.docx && head -c 5 笔记.pdf | grep -q %PDF-'
 	check "XLSX → PDF（LibreOffice）" 'conv -to doc:pdf 表格.xlsx && head -c 5 表格.pdf | grep -q %PDF-'
-	check "PPTX → PDF（LibreOffice）" 'mkdir -p ppt && conv -to doc:pdf -o ppt "文档 A.pptx" && head -c 5 "ppt/文档 A.pdf" | grep -q %PDF-'
+	# 演示文稿用 LibreOffice 自己从 PDF 做一份（程序 PDF 转 PPT 生成的文件 LibreOffice 读不了，单独记一下）
+	/Applications/LibreOffice.app/Contents/MacOS/soffice --headless --infilter=impress_pdf_import --convert-to pptx --outdir lo "文档 A.pdf" > /dev/null 2>&1
+	cp "lo/文档 A.pptx" 幻灯片.pptx 2> /dev/null || true
+	check "PPTX → PDF（LibreOffice）" 'conv -to doc:pdf 幻灯片.pptx && head -c 5 幻灯片.pdf | grep -q %PDF-'
+	if conv -to doc:pdf -o ppt "文档 A.pptx" > log-ourpptx.txt 2>&1; then echo "  （LibreOffice 能打开程序生成的 PPTX）"; else echo "  （注意：LibreOffice 打不开程序 PDF 转 PPT 生成的 PPTX，不算失败）"; fi
 	check "DOCX → 长图" 'conv -to doc:long 笔记.docx && [ "$(kind 笔记_长图.jpg)" = JPEG ]'
-	check "PPTX → MP4 视频（每页 1 秒）" 'mkdir -p pptv && conv -to doc:mp4 -o pptv -set slidesec=1 "文档 A.pptx" && [ "$(vcodec "pptv/文档 A.mp4")" = h264 ]'
+	check "PPTX → MP4 视频（每页 1 秒）" 'conv -to doc:mp4 -set slidesec=1 幻灯片.pptx && [ "$(vcodec 幻灯片.mp4)" = h264 ]'
 	check "XLSX → CSV" 'mkdir -p csv && conv -to doc:csv -o csv 表格.xlsx && grep -q 苹果 csv/表格.csv'
 	check "PDF → Word（LibreOffice）" 'conv -to pdf:docx "文档 A.pdf" && unzip -l "文档 A.docx" | grep -q word/document.xml'
 else

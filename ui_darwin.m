@@ -661,6 +661,7 @@ void ui_window(const char *title, double w, double h, double minW, double minH) 
 	root.wantsLayer = YES;
 	[root registerForDraggedTypes:@[ NSPasteboardTypeFileURL ]];
 	win.contentView = root;
+	h = root.bounds.size.height; // 内容一直铺到标题栏下面，比 contentRect 高
 
 	// 左边的分类：系统侧边栏的半透明材质，一直铺到窗口顶上（红黄绿三个按钮在它上面）
 	sideFX = [[NSVisualEffectView alloc] initWithFrame:NSMakeRect(0, 0, sideWidth, h)];
@@ -687,6 +688,7 @@ void ui_window(const char *title, double w, double h, double minW, double minH) 
 	navTable.focusRingType = NSFocusRingTypeNone;
 	NSTableColumn *nc = [[NSTableColumn alloc] initWithIdentifier:@"nav"];
 	nc.resizingMask = NSTableColumnAutoresizingMask;
+	nc.width = sideWidth - 24; // 右边的文件数要贴着右边
 	[navTable addTableColumn:nc];
 	navTable.columnAutoresizingStyle = NSTableViewUniformColumnAutoresizingStyle;
 	navTable.dataSource = app;
@@ -760,7 +762,7 @@ static NSBox *newBox(NSColor *fill, NSColor *border, CGFloat radius) {
 static void buildList(void) {
 	listScroll = [NSScrollView new];
 	listScroll.hasVerticalScroller = YES;
-	listScroll.hasHorizontalScroller = NO;
+	listScroll.hasHorizontalScroller = YES; // 窗口很窄时可以左右拖着看「结果」
 	listScroll.autohidesScrollers = YES;
 	listScroll.borderType = NSNoBorder;
 	listScroll.drawsBackground = NO;
@@ -791,9 +793,9 @@ static void buildList(void) {
 static void fitColumns(CGFloat width) {
 	NSArray<NSTableColumn *> *c = listTable.tableColumns;
 	if (c.count < 4) return;
-	CGFloat size = 72, state = 128;
-	CGFloat rest = MAX(width - size - state - 8 * 4 - 16, 240);
-	CGFloat name = rest * 0.46;
+	CGFloat size = 66, state = 116;
+	CGFloat rest = MAX(width - size - state - 8 * 4 - 18, 200);
+	CGFloat name = rest * 0.44;
 	c[0].width = name;
 	c[1].width = size;
 	c[2].width = state;
